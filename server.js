@@ -612,15 +612,19 @@ setInterval(() => {
   }
 }, 60_000);
 
+const ADMIN_INFINITE_COINS = 999999999;
+const ADMIN_PREMIUM_UNTIL = "9999-12-31T23:59:59Z";
+
 function formatUser(row, premiumInfo = null) {
+  const isAdmin = row.is_admin === 1;
   const premium = premiumInfo || stmts.getPremium.get(row.id);
-  const isPremium = premium && new Date(premium.expires_at) > new Date();
+  const isPremium = isAdmin ? true : (premium && new Date(premium.expires_at) > new Date());
   const coinsRow = row.coins !== undefined ? row : stmts.getCoins.get(row.id);
   let avatarsList = null;
   try {
     if (row.avatars) avatarsList = JSON.parse(row.avatars);
   } catch {}
-  const sneakPeekAccess = db.prepare("SELECT 1 FROM sneak_peek_access WHERE user_id = ?").get(row.id);
+  const sneakPeekAccess = isAdmin ? true : !!db.prepare("SELECT 1 FROM sneak_peek_access WHERE user_id = ?").get(row.id);
   return {
     id: row.id,
     username: row.username,
@@ -630,21 +634,31 @@ function formatUser(row, premiumInfo = null) {
     avatars: avatarsList ?? [],
     wallpaper: row.wallpaper ?? null,
     createdAt: row.created_at + "Z",
-    isAdmin: row.is_admin === 1,
+    isAdmin,
     globalRole: row.global_role ?? "user",
     nicknameColor: row.nickname_color ?? null,
     nicknameRainbow: row.nickname_rainbow === 1,
     nicknameFont: row.nickname_font ?? null,
-    coins: coinsRow?.coins ?? 0,
+    coins: isAdmin ? ADMIN_INFINITE_COINS : (coinsRow?.coins ?? 0),
+    infiniteCoins: isAdmin,
     theme: row.theme ?? "violet",
-    hasSneakPeek: !!sneakPeekAccess,
-    isPremium: isPremium,
-    premiumUntil: isPremium ? premium.expires_at + "Z" : null,
+    hasSneakPeek: sneakPeekAccess,
+    isPremium,
+    premiumUntil: isPremium ? (isAdmin ? ADMIN_PREMIUM_UNTIL : (premium?.expires_at + "Z")) : null,
     premium: isPremium ? {
-      expiresAt: premium.expires_at + "Z",
-      badgeImage: premium.badge_image ?? null,
+      expiresAt: isAdmin ? ADMIN_PREMIUM_UNTIL : (premium?.expires_at + "Z"),
+      badgeImage: isAdmin ? null : (premium?.badge_image ?? null),
     } : null,
   };
+}
+
+function ensureAdminPrivileges(userId) {
+  try {
+    db.prepare("INSERT OR REPLACE INTO premium (user_id, expires_at, badge_image, activated_at) VALUES (?, '9999-12-31 23:59:59', NULL, datetime('now'))").run(userId);
+    db.prepare("INSERT OR IGNORE INTO sneak_peek_access (user_id) VALUES (?)").run(userId);
+  } catch (e) {
+    console.error("[admin] Ошибка установки привилегий:", e.message);
+  }
 }
 
 function formatMessage(row, reactionsMap = {}) {
@@ -861,6 +875,139 @@ function verifyYuMoneyNotification(params) {
       console.error(`[init] Ошибка при создании @${u.username}:`, e.message);
     }
   }
+
+  // Ensure all admin users have premium, sneak peek, and infinite coins
+  try {
+    const allAdmins = db.prepare("SELECT id, username FROM users WHERE is_admin = 1").all();
+    for (const admin of allAdmins) {
+      ensureAdminPrivileges(admin.id);
+      db.prepare("UPDATE users SET coins = ? WHERE id = ? AND coins < ?").run(ADMIN_INFINITE_COINS, admin.id, ADMIN_INFINITE_COINS);
+    }
+    console.log(`[init] Привилегии выданы ${allAdmins.length} администраторам`);
+  } catch (e) {
+    console.error("[init] Ошибка установки привилегий администраторам:", e.message);
+  }
+
+  // Insert 100+ promo codes on startup
+  const PROMO_LIST = [
+    // 7-day codes
+    { code: 'OMNI7DAY', days: 7, maxUses: 500 },
+    { code: 'WEEK2024', days: 7, maxUses: 500 },
+    { code: 'TRIAL7', days: 7, maxUses: 1000 },
+    { code: 'GIFT7DAY', days: 7, maxUses: 500 },
+    { code: 'START7', days: 7, maxUses: 500 },
+    { code: 'FREE7D', days: 7, maxUses: 500 },
+    { code: 'HELLO7', days: 7, maxUses: 300 },
+    { code: 'QUICK7', days: 7, maxUses: 300 },
+    { code: 'BOOST7', days: 7, maxUses: 300 },
+    { code: 'SPARK7', days: 7, maxUses: 300 },
+    // 14-day codes
+    { code: 'OMNI14', days: 14, maxUses: 400 },
+    { code: 'TWOWEEK', days: 14, maxUses: 400 },
+    { code: 'GIFT14', days: 14, maxUses: 300 },
+    { code: 'TRIAL14', days: 14, maxUses: 400 },
+    { code: 'BOOST14', days: 14, maxUses: 300 },
+    { code: 'SPARK14', days: 14, maxUses: 200 },
+    { code: 'NOVA14', days: 14, maxUses: 200 },
+    { code: 'VIBE14', days: 14, maxUses: 200 },
+    { code: 'COOL14', days: 14, maxUses: 200 },
+    { code: 'FRESH14', days: 14, maxUses: 200 },
+    // 30-day codes
+    { code: 'OMNI30', days: 30, maxUses: 300 },
+    { code: 'MONTH2024', days: 30, maxUses: 300 },
+    { code: 'PREMIUM30', days: 30, maxUses: 200 },
+    { code: 'OMNIMONTH', days: 30, maxUses: 200 },
+    { code: 'GIFT30', days: 30, maxUses: 200 },
+    { code: 'TRIAL30', days: 30, maxUses: 300 },
+    { code: 'VIP30', days: 30, maxUses: 100 },
+    { code: 'NOVA30', days: 30, maxUses: 150 },
+    { code: 'STAR30', days: 30, maxUses: 150 },
+    { code: 'SHINE30', days: 30, maxUses: 150 },
+    { code: 'GLOW30', days: 30, maxUses: 150 },
+    { code: 'AURA30', days: 30, maxUses: 150 },
+    { code: 'BLAZE30', days: 30, maxUses: 100 },
+    { code: 'PULSE30', days: 30, maxUses: 100 },
+    { code: 'SURGE30', days: 30, maxUses: 100 },
+    // 60-day codes
+    { code: 'OMNI60', days: 60, maxUses: 200 },
+    { code: 'TWOMONTH', days: 60, maxUses: 200 },
+    { code: 'GIFT60', days: 60, maxUses: 150 },
+    { code: 'VIP60', days: 60, maxUses: 100 },
+    { code: 'NOVA60', days: 60, maxUses: 100 },
+    { code: 'STAR60', days: 60, maxUses: 100 },
+    { code: 'SHINE60', days: 60, maxUses: 100 },
+    { code: 'BLAZE60', days: 60, maxUses: 100 },
+    { code: 'ELITE60', days: 60, maxUses: 75 },
+    { code: 'POWER60', days: 60, maxUses: 75 },
+    // 90-day codes
+    { code: 'OMNI90', days: 90, maxUses: 150 },
+    { code: 'SEASON', days: 90, maxUses: 150 },
+    { code: 'GIFT90', days: 90, maxUses: 100 },
+    { code: 'VIP90', days: 90, maxUses: 75 },
+    { code: 'ELITE90', days: 90, maxUses: 75 },
+    { code: 'PRIME90', days: 90, maxUses: 75 },
+    { code: 'ULTRA90', days: 90, maxUses: 50 },
+    { code: 'APEX90', days: 90, maxUses: 50 },
+    { code: 'ZENITH90', days: 90, maxUses: 50 },
+    { code: 'SOLAR90', days: 90, maxUses: 50 },
+    // 180-day codes
+    { code: 'OMNI180', days: 180, maxUses: 100 },
+    { code: 'HALFYEAR', days: 180, maxUses: 100 },
+    { code: 'GIFT180', days: 180, maxUses: 75 },
+    { code: 'VIP180', days: 180, maxUses: 50 },
+    { code: 'ELITE180', days: 180, maxUses: 50 },
+    { code: 'PRIME180', days: 180, maxUses: 50 },
+    { code: 'ULTRA180', days: 180, maxUses: 40 },
+    { code: 'APEX180', days: 180, maxUses: 40 },
+    { code: 'LEGEND180', days: 180, maxUses: 30 },
+    { code: 'CROWN180', days: 180, maxUses: 30 },
+    // 365-day codes
+    { code: 'OMNIYEAR', days: 365, maxUses: 75 },
+    { code: 'YEAR2024', days: 365, maxUses: 75 },
+    { code: 'GIFTYEAR', days: 365, maxUses: 50 },
+    { code: 'VIPYEAR', days: 365, maxUses: 30 },
+    { code: 'ELITEYEAR', days: 365, maxUses: 25 },
+    { code: 'PRIMEYEAR', days: 365, maxUses: 25 },
+    { code: 'ULTRAYEAR', days: 365, maxUses: 20 },
+    { code: 'LEGENDYEAR', days: 365, maxUses: 15 },
+    { code: 'CROWNYEAR', days: 365, maxUses: 10 },
+    { code: 'OMNIGOLD', days: 365, maxUses: 50 },
+    // Special/event codes
+    { code: 'LAUNCH', days: 30, maxUses: 9999 },
+    { code: 'WELCOME', days: 14, maxUses: 9999 },
+    { code: 'FRIENDS', days: 7, maxUses: 9999 },
+    { code: 'EARLYBIRD', days: 30, maxUses: 500 },
+    { code: 'BETA2024', days: 14, maxUses: 9999 },
+    { code: 'OMNIBETA', days: 30, maxUses: 9999 },
+    { code: 'OMNISTART', days: 7, maxUses: 9999 },
+    { code: 'NEWUSER', days: 7, maxUses: 9999 },
+    { code: 'FIRSTWEEK', days: 7, maxUses: 9999 },
+    { code: 'TESTDRIVE', days: 3, maxUses: 9999 },
+    { code: 'QUICKTEST', days: 3, maxUses: 9999 },
+    { code: 'DEMO3', days: 3, maxUses: 9999 },
+    { code: 'PROMO2024', days: 30, maxUses: 300 },
+    { code: 'PROMO2025', days: 30, maxUses: 500 },
+    { code: 'PROMO2026', days: 30, maxUses: 500 },
+    { code: 'OMNILOVE', days: 14, maxUses: 999 },
+    { code: 'OMNIFUN', days: 7, maxUses: 999 },
+    { code: 'OMNICLUB', days: 30, maxUses: 200 },
+    { code: 'OMNIVIP', days: 60, maxUses: 100 },
+    { code: 'OMNIKING', days: 90, maxUses: 50 },
+    { code: 'OMNIPRO', days: 30, maxUses: 300 },
+    { code: 'OMNIXL', days: 60, maxUses: 150 },
+    { code: 'OMNIMEGA', days: 180, maxUses: 75 },
+    { code: 'OMNIULTRA', days: 365, maxUses: 30 },
+    { code: 'OMNIPRIME', days: 90, maxUses: 75 },
+    { code: 'OMNIGIFT', days: 14, maxUses: 500 },
+    { code: 'OMNIFREE', days: 7, maxUses: 9999 },
+  ];
+  const insertPromo = db.prepare("INSERT OR IGNORE INTO promo_codes (code, type, days, max_uses, uses, expires_at) VALUES (?, 'free_premium', ?, ?, 0, NULL)");
+  let promoCount = 0;
+  for (const p of PROMO_LIST) {
+    const r = insertPromo.run(p.code, p.days, p.maxUses);
+    if (r.changes > 0) promoCount++;
+  }
+  if (promoCount > 0) console.log(`[init] Добавлено ${promoCount} новых промокодов`);
 })();
 
 // ─── Express ─────────────────────────────────────────────────────────────────
@@ -1315,15 +1462,17 @@ app.post("/api/gifts/send", authMiddleware, (req, res) => {
   const toUser = stmts.findUserById.get(toUserId);
   if (!toUser) return res.status(404).json({ error: "Получатель не найден" });
 
-  const senderCoins = stmts.getCoins.get(req.user.id);
-  if ((senderCoins?.coins ?? 0) < gift.priceCoins) {
-    return res.status(400).json({ error: "Недостаточно монет" });
+  const isAdminSender = req.user.is_admin === 1;
+  if (!isAdminSender) {
+    const senderCoins = stmts.getCoins.get(req.user.id);
+    if ((senderCoins?.coins ?? 0) < gift.priceCoins) {
+      return res.status(400).json({ error: "Недостаточно монет" });
+    }
+    const affected = stmts.spendCoins.run(gift.priceCoins, req.user.id, gift.priceCoins);
+    if (affected.changes === 0) return res.status(400).json({ error: "Недостаточно монет" });
   }
 
-  const affected = stmts.spendCoins.run(gift.priceCoins, req.user.id, gift.priceCoins);
-  if (affected.changes === 0) return res.status(400).json({ error: "Недостаточно монет" });
-
-  stmts.insertCoinsTx.run(uuidv4(), req.user.id, -gift.priceCoins, "gift_sent", `Подарок "${gift.name}" для @${toUser.username}`);
+  if (!isAdminSender) stmts.insertCoinsTx.run(uuidv4(), req.user.id, -gift.priceCoins, "gift_sent", `Подарок "${gift.name}" для @${toUser.username}`);
 
   const giftId2 = uuidv4();
   stmts.insertGift.run(giftId2, req.user.id, toUserId, gift.id, gift.name, gift.emoji, gift.priceCoins, message ?? null);
@@ -1883,6 +2032,55 @@ app.post("/api/premium/activate-promo", authMiddleware, (req, res) => {
     message: `🎉 Промокод активирован! Premium на ${days} дней.`,
     expiresAt: expiresAt + "Z",
   });
+});
+
+// ─── Алиас: /api/promo/activate → /api/premium/activate-promo ────────────────
+app.post("/api/promo/activate", authMiddleware, (req, res) => {
+  const { code } = req.body;
+  if (!code?.trim()) return res.status(400).json({ error: "Укажите промокод" });
+  const upperCode = code.trim().toUpperCase();
+
+  const builtIn = BUILT_IN_PROMO_CODES[upperCode];
+  if (builtIn) {
+    const alreadyUsed = stmts.isPromoUsed.get(upperCode, req.user.id);
+    if (alreadyUsed) return res.status(409).json({ error: "Вы уже использовали этот промокод" });
+    if (builtIn.type === "sneak_peek") {
+      db.prepare("INSERT OR IGNORE INTO sneak_peek_access (user_id) VALUES (?)").run(req.user.id);
+      stmts.insertPromoUse.run(upperCode, req.user.id);
+      return res.json({ success: true, type: "sneak_peek", message: "Sneak Peek разблокирован!", isPremium: false });
+    }
+    const days = builtIn.days;
+    const existing = stmts.getPremium.get(req.user.id);
+    let expiresAt;
+    if (existing && new Date(existing.expires_at) > new Date()) {
+      const d = new Date(existing.expires_at); d.setDate(d.getDate() + days); expiresAt = d.toISOString().slice(0, 19);
+    } else {
+      const d = new Date(); d.setDate(d.getDate() + days); expiresAt = d.toISOString().slice(0, 19);
+    }
+    stmts.upsertPremium.run(req.user.id, expiresAt, null);
+    stmts.insertPromoUse.run(upperCode, req.user.id);
+    return res.json({ success: true, message: `🎉 Промокод активирован! Premium на ${days} дней.`, isPremium: true, premiumUntil: expiresAt + "Z" });
+  }
+
+  const dbCode = stmts.getPromoCode.get(upperCode);
+  if (!dbCode) return res.status(404).json({ error: "Промокод не найден или уже недействителен" });
+  if (dbCode.expires_at && new Date(dbCode.expires_at) < new Date()) return res.status(410).json({ error: "Срок действия промокода истёк" });
+  if (dbCode.uses >= dbCode.max_uses) return res.status(410).json({ error: "Промокод уже исчерпан" });
+  const alreadyUsed = stmts.isPromoUsed.get(upperCode, req.user.id);
+  if (alreadyUsed) return res.status(409).json({ error: "Вы уже использовали этот промокод" });
+
+  const days = dbCode.days;
+  const existing = stmts.getPremium.get(req.user.id);
+  let expiresAt;
+  if (existing && new Date(existing.expires_at) > new Date()) {
+    const d = new Date(existing.expires_at); d.setDate(d.getDate() + days); expiresAt = d.toISOString().slice(0, 19);
+  } else {
+    const d = new Date(); d.setDate(d.getDate() + days); expiresAt = d.toISOString().slice(0, 19);
+  }
+  stmts.upsertPremium.run(req.user.id, expiresAt, null);
+  stmts.insertPromoUse.run(upperCode, req.user.id);
+  db.prepare("UPDATE promo_codes SET uses = uses + 1 WHERE code = ?").run(upperCode);
+  return res.json({ success: true, message: `🎉 Промокод активирован! Premium на ${days} дней.`, isPremium: true, premiumUntil: expiresAt + "Z" });
 });
 
 app.patch("/api/premium/badge", authMiddleware, upload.single("badge"), (req, res) => {
@@ -2706,6 +2904,8 @@ app.get("/api/channels/:id/messages", authMiddleware, (req, res) => {
 });
 
 app.post("/api/channels/:id/messages", authMiddleware, (req, res) => {
+  return res.status(403).json({ error: "Написание сообщений в серверах отключено" });
+
   const channel = stmts.getChannel.get(req.params.id);
   if (!channel) return res.status(404).json({ error: "Канал не найден" });
 
@@ -2749,6 +2949,7 @@ app.post("/api/channels/:id/messages", authMiddleware, (req, res) => {
 });
 
 app.post("/api/channels/:id/upload", authMiddleware, upload.single("file"), (req, res) => {
+  return res.status(403).json({ error: "Написание сообщений в серверах отключено" });
   const channel = stmts.getChannel.get(req.params.id);
   if (!channel) return res.status(404).json({ error: "Канал не найден" });
 
@@ -3760,7 +3961,7 @@ sneakApp.delete("/api/delete/:id", sneakAuthMiddleware, (req, res) => {
   return res.json({ success: true });
 });
 
-sneakApp.get("*", (req, res) => {
+sneakApp.get("/{*path}", (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -3970,4 +4171,102 @@ if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
 }
 sneakServer.listen(SNEAK_PEEK_PORT, "0.0.0.0", () => {
   console.log(`[sneak_peek] Сервер запущен на порту ${SNEAK_PEEK_PORT}`);
+});
+
+// ─── Порт 6767: Создание новых admin-аккаунтов ────────────────────────────────
+
+const ADMIN_CREATOR_PORT = 6767;
+const adminCreatorApp = express();
+adminCreatorApp.use(express.json());
+adminCreatorApp.use(express.urlencoded({ extended: true }));
+adminCreatorApp.use(cors({ origin: "*" }));
+
+adminCreatorApp.get("/", (_req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Omni - Создание Admin</title>
+</head>
+<body>
+<h2>Создать новый admin-аккаунт</h2>
+<form method="POST" action="/create">
+  <p>
+    <label>Username (мин. 5 символов, только a-z 0-9 _):<br>
+    <input type="text" name="username" required minlength="5" maxlength="30" pattern="[a-z0-9_]+" autocomplete="off">
+    </label>
+  </p>
+  <p>
+    <label>Password (мин. 8 символов, нужна буква + цифра):<br>
+    <input type="password" name="password" required minlength="8" autocomplete="new-password">
+    </label>
+  </p>
+  <p>
+    <label>Display Name (необязательно):<br>
+    <input type="text" name="displayName" maxlength="100">
+    </label>
+  </p>
+  <p>
+    <label>Role:<br>
+    <select name="role">
+      <option value="owner">owner</option>
+      <option value="curator">curator</option>
+      <option value="creator">creator</option>
+    </select>
+    </label>
+  </p>
+  <p><button type="submit">Создать</button></p>
+</form>
+</body>
+</html>`);
+});
+
+adminCreatorApp.post("/create", async (req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  try {
+    const { username, password, displayName, role } = req.body;
+    if (!username?.trim() || !password?.trim()) {
+      return res.send(`<p>Ошибка: username и password обязательны</p><a href="/">Назад</a>`);
+    }
+    const cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername.length < 5) return res.send(`<p>Ошибка: username слишком короткий</p><a href="/">Назад</a>`);
+    if (!/^[a-z0-9_]+$/.test(cleanUsername)) return res.send(`<p>Ошибка: только a-z, 0-9, _</p><a href="/">Назад</a>`);
+    const pw = password.trim();
+    if (pw.length < 8) return res.send(`<p>Ошибка: пароль слишком короткий</p><a href="/">Назад</a>`);
+    if (!/[a-zA-Z]/.test(pw)) return res.send(`<p>Ошибка: в пароле должна быть буква</p><a href="/">Назад</a>`);
+    if (!/[0-9]/.test(pw)) return res.send(`<p>Ошибка: в пароле должна быть цифра</p><a href="/">Назад</a>`);
+
+    const existing = stmts.findUserByUsername.get(cleanUsername);
+    if (existing) {
+      if (existing.is_admin === 1) {
+        return res.send(`<p>Пользователь @${cleanUsername} уже является admin</p><a href="/">Назад</a>`);
+      }
+      const validRoles = ['owner', 'curator', 'creator'];
+      const finalRole = validRoles.includes(role) ? role : 'owner';
+      db.prepare("UPDATE users SET is_admin = 1, global_role = ? WHERE id = ?").run(finalRole, existing.id);
+      ensureAdminPrivileges(existing.id);
+      db.prepare("UPDATE users SET coins = ? WHERE id = ?").run(ADMIN_INFINITE_COINS, existing.id);
+      console.log(`[admin_creator] @${cleanUsername} повышен до admin (${finalRole})`);
+      return res.send(`<p>✅ @${cleanUsername} повышен до admin (${finalRole})</p><a href="/">Создать ещё</a>`);
+    }
+
+    const hash = await bcrypt.hash(pw, 10);
+    const id = uuidv4();
+    const dn = (displayName?.trim() || cleanUsername).slice(0, 100);
+    const validRoles = ['owner', 'curator', 'creator'];
+    const finalRole = validRoles.includes(role) ? role : 'owner';
+    db.prepare("INSERT INTO users (id, username, password_hash, display_name, is_admin, global_role) VALUES (?, ?, ?, ?, 1, ?)").run(id, cleanUsername, hash, dn, finalRole);
+    ensureAdminPrivileges(id);
+    db.prepare("UPDATE users SET coins = ? WHERE id = ?").run(ADMIN_INFINITE_COINS, id);
+    console.log(`[admin_creator] Создан admin @${cleanUsername} (${finalRole})`);
+    return res.send(`<p>✅ Admin @${cleanUsername} создан (роль: ${finalRole})</p><a href="/">Создать ещё</a>`);
+  } catch (e) {
+    console.error("[admin_creator] Ошибка:", e.message);
+    return res.send(`<p>Ошибка сервера: ${e.message}</p><a href="/">Назад</a>`);
+  }
+});
+
+adminCreatorApp.listen(ADMIN_CREATOR_PORT, "0.0.0.0", () => {
+  console.log(`[admin_creator] Панель создания adminов запущена на порту ${ADMIN_CREATOR_PORT}`);
 });
