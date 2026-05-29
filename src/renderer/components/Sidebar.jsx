@@ -145,7 +145,7 @@ export default function Sidebar({ getWs, onRefreshConvs, onRefreshServers }) {
 
 function ConvItem({ conv, active, unread, onClick }) {
   const name = conv.otherUser?.displayName || conv.otherUser?.username || conv.name || 'Группа'
-  const lastMsg = conv.lastMessage || ''
+  const lastMsg = conv.lastMessage?.content || ''
   const time = conv.lastMessageAt ? fmtTime(conv.lastMessageAt) : ''
   const isGroup = conv.isGroup
 

@@ -27,28 +27,26 @@ jobs:
         run: npm ci
 
       - name: Build Vite frontend
-        run: npm run vite -- --mode production
-        env:
-          NODE_ENV: production
+        run: npx vite build --mode production
 
-      - name: Build Electron app (NSIS + Portable)
+      - name: Build Electron app
         run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload NSIS installer
+      - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: OmniClient-Setup-win-x64
-          path: release/*.exe
+          name: OmniClient-Setup
+          path: release/*Setup*.exe
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Upload portable
+      - name: Upload Portable EXE
         uses: actions/upload-artifact@v4
         with:
-          name: OmniClient-Portable-win-x64
-          path: release/*.exe
+          name: OmniClient-Portable
+          path: release/*Portable*.exe
           if-no-files-found: warn
           retention-days: 30
 
