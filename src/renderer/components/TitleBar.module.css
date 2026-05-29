@@ -1,0 +1,50 @@
+.bar {
+  height: 32px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  z-index: 100;
+}
+
+.drag {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  -webkit-app-region: drag;
+}
+
+.appName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: 0.5px;
+}
+
+.controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.btn {
+  width: 46px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  transition: background 0.15s, color 0.15s;
+}
+.btn:hover {
+  background: var(--bg4);
+  color: var(--text);
+}
+
+.closeBtn:hover {
+  background: #c42b1c;
+  color: #fff;
+}

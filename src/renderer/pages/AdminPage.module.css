@@ -1,0 +1,203 @@
+.root {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg0);
+}
+
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.denied {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--red);
+}
+
+.tabs {
+  display: flex;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.tab {
+  flex: 1;
+  padding: 9px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--text); }
+.tabActive { background: var(--bg4); color: var(--text); }
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.section { display: flex; flex-direction: column; gap: 12px; }
+
+.searchRow { display: flex; gap: 8px; }
+
+.input {
+  flex: 1;
+  padding: 10px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text);
+  user-select: text;
+  transition: border-color 0.15s;
+}
+.input:focus { border-color: var(--accent); }
+.input::placeholder { color: var(--text3); }
+
+.searchBtn {
+  padding: 10px 16px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.searchBtn:hover { background: var(--acc2); }
+
+.userList { display: flex; flex-direction: column; gap: 4px; }
+
+.userRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.userInfo { flex: 1; overflow: hidden; }
+.uName { display: block; font-size: 13px; font-weight: 600; color: var(--text); }
+.uSub { font-size: 11px; color: var(--text3); }
+
+.badge_red { color: var(--red); }
+.badge_blue { color: var(--cyan); }
+.badge_yellow { color: var(--yellow); }
+.badge_gold { color: var(--gold); }
+
+.userActions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+
+.aBtn {
+  padding: 4px 10px;
+  background: var(--bg4);
+  color: var(--text2);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.aBtn:hover { background: var(--bg5); }
+
+.aBtnRed {
+  padding: 4px 10px;
+  background: rgba(239,68,68,0.15);
+  color: var(--red);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.aBtnRed:hover { background: rgba(239,68,68,0.3); }
+
+.aBtnBlue {
+  padding: 4px 10px;
+  background: rgba(34,211,238,0.1);
+  color: var(--cyan);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.aBtnBlue:hover { background: rgba(34,211,238,0.2); }
+
+.aBtnGold {
+  padding: 4px 10px;
+  background: rgba(251,191,36,0.15);
+  color: var(--gold);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.aBtnGold:hover { background: rgba(251,191,36,0.3); }
+
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cardTitle { font-size: 14px; font-weight: 700; color: var(--text); }
+
+.promoForm, .coinsForm {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.createBtn {
+  padding: 10px 16px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.createBtn:hover { background: var(--acc2); }
+
+.promoList { display: flex; flex-direction: column; gap: 4px; }
+
+.promoRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.promoCode { font-size: 14px; font-weight: 700; color: var(--accent); font-family: monospace; }
+.promoMeta { flex: 1; font-size: 12px; color: var(--text3); }
+
+.deleteBtn {
+  color: var(--text3);
+  font-size: 14px;
+  transition: color 0.15s;
+}
+.deleteBtn:hover { color: var(--red); }
