@@ -3,6 +3,7 @@ import useStore from '../../store/useStore'
 import { get, post, del, patch } from '../../lib/api'
 import { callManager } from '../../lib/webrtc'
 import Avatar from '../Avatar'
+import StickerPackPopup from '../StickerPackPopup'
 import styles from './ChatView.module.css'
 
 const BASE_URL = 'https://omnii.duckdns.org:3000'
@@ -27,8 +28,8 @@ function fullUrl(url) {
   return url.startsWith('http') ? url : BASE_URL + url
 }
 
-export default function ChatView({ getWs }) {
-  const { me, conversations, activeConvId, messages, setMessages, typing } = useStore()
+export default function ChatView({ getWs, onStickerPackAdded }) {
+  const { me, conversations, activeConvId, messages, setMessages, typing, myStickers } = useStore()
 
   const conv = conversations.find(c => c.id === activeConvId)
   const msgs = messages[activeConvId] || []
@@ -41,6 +42,8 @@ export default function ChatView({ getWs }) {
   const [ctxMenu, setCtxMenu] = useState(null)
   const [emojiPickerMsgId, setEmojiPickerMsgId] = useState(null)
   const [showEmojiPanel, setShowEmojiPanel] = useState(false)
+  const [showStickerPanel, setShowStickerPanel] = useState(false)
+  const [stickerPopupSlug, setStickerPopupSlug] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [pinnedOpen, setPinnedOpen] = useState(false)
@@ -77,7 +80,7 @@ export default function ChatView({ getWs }) {
   useEffect(() => { scrollToBottom() }, [msgs.length])
 
   useEffect(() => {
-    const handler = () => { setCtxMenu(null); setEmojiPickerMsgId(null); setShowEmojiPanel(false) }
+    const handler = () => { setCtxMenu(null); setEmojiPickerMsgId(null); setShowEmojiPanel(false); setShowStickerPanel(false) }
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)
   }, [])
@@ -237,6 +240,20 @@ export default function ChatView({ getWs }) {
     setEmojiPickerMsgId(null)
   }
 
+  async function sendSticker(sticker) {
+    setShowStickerPanel(false)
+    await post(`/api/conversations/${activeConvId}/messages`, {
+      json: {
+        type: 'sticker',
+        content: sticker.name,
+        fileUrl: sticker.imageUrl,
+        replyToId: replyTo?.id || null,
+      }
+    })
+    setReplyTo(null)
+    scrollToBottom()
+  }
+
   async function pinMessage(msgId) {
     await post(`/api/conversations/${activeConvId}/pin/${msgId}`)
     setCtxMenu(null)
@@ -341,6 +358,7 @@ export default function ChatView({ getWs }) {
                 emojiPickerMsgId={emojiPickerMsgId}
                 setEmojiPickerMsgId={setEmojiPickerMsgId}
                 onOpenMedia={() => openLightbox(msg)}
+                onStickerPackLink={slug => setStickerPopupSlug(slug)}
               />
             ))}
           </React.Fragment>
@@ -430,6 +448,15 @@ export default function ChatView({ getWs }) {
         />
       )}
 
+      {/* Sticker panel */}
+      {showStickerPanel && (
+        <StickerPanel
+          packs={myStickers}
+          onSend={sendSticker}
+          onClose={() => setShowStickerPanel(false)}
+        />
+      )}
+
       {/* Input area */}
       <div className={styles.inputArea}>
         <button className={styles.attachBtn} onClick={() => fileRef.current?.click()} title="Прикрепить файл" disabled={recording}>
@@ -447,11 +474,21 @@ export default function ChatView({ getWs }) {
 
         <button
           className={`${styles.emojiBtn} ${showEmojiPanel ? styles.emojiBtnActive : ''}`}
-          onClick={e => { e.stopPropagation(); setShowEmojiPanel(v => !v) }}
+          onClick={e => { e.stopPropagation(); setShowEmojiPanel(v => !v); setShowStickerPanel(false) }}
           title="Эмодзи / GIF"
           disabled={recording}
         >
           😊
+        </button>
+
+        <button
+          className={`${styles.emojiBtn} ${showStickerPanel ? styles.emojiBtnActive : ''}`}
+          onClick={e => { e.stopPropagation(); setShowStickerPanel(v => !v); setShowEmojiPanel(false) }}
+          title="Стикеры"
+          disabled={recording}
+          style={{ fontSize: 18 }}
+        >
+          🏷️
         </button>
 
         {editingMsg ? (
@@ -504,6 +541,15 @@ export default function ChatView({ getWs }) {
         )}
       </div>
 
+      {/* Sticker pack popup */}
+      {stickerPopupSlug && (
+        <StickerPackPopup
+          slug={stickerPopupSlug}
+          onClose={() => setStickerPopupSlug(null)}
+          onAddPack={() => { onStickerPackAdded && onStickerPackAdded(); setStickerPopupSlug(null) }}
+        />
+      )}
+
       {/* Context menu */}
       {ctxMenu && (
         <ContextMenu
@@ -536,8 +582,86 @@ export default function ChatView({ getWs }) {
   )
 }
 
+// ─── StickerPanel ───────────────────────────────────────────────────────────────
+function StickerPanel({ packs, onSend, onClose }) {
+  const [activePack, setActivePack] = useState(packs?.[0]?.id || null)
+  const currentPack = packs?.find(p => p.id === activePack)
+
+  if (!packs || packs.length === 0) {
+    return (
+      <div className={styles.emojiPanel} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text2)' }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>📦</div>
+          <div style={{ fontSize: 13 }}>Нет стикеров</div>
+          <div style={{ fontSize: 12, marginTop: 6, color: 'var(--text3)' }}>Добавьте паки в Creator Studio</div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={styles.emojiPanel} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '4px 8px', gap: 4, overflowX: 'auto' }}>
+        {packs.map(p => (
+          <button
+            key={p.id}
+            onClick={() => setActivePack(p.id)}
+            style={{
+              padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12,
+              background: activePack === p.id ? 'var(--accent)' : 'var(--bg3)',
+              color: activePack === p.id ? '#fff' : 'var(--text2)',
+              whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, padding: '10px', overflowY: 'auto', maxHeight: 220 }}>
+        {currentPack?.stickers?.map(s => (
+          <button
+            key={s.id}
+            onClick={() => onSend(s)}
+            style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, padding: 6, cursor: 'pointer', transition: '0.15s' }}
+            onMouseOver={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          >
+            <img src={fullUrl(s.imageUrl)} alt={s.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'contain', display: 'block' }} loading="lazy" />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── MessageBubble ─────────────────────────────────────────────────────────────
-function MessageBubble({ msg, isMe, onCtxMenu, onReact, showAvatar, emojiPickerMsgId, setEmojiPickerMsgId, onOpenMedia }) {
+const OM_LINK_RE = /Om\.org\/([a-z0-9_-]+)/gi
+
+function detectOmLinks(text, onStickerPackLink) {
+  if (!text || !onStickerPackLink) return <span className={styles.msgContent}>{text}</span>
+  const parts = []
+  let last = 0
+  const regex = /Om\.org\/([a-z0-9_-]+)/gi
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index))
+    const slug = match[1]
+    parts.push(
+      <button
+        key={match.index}
+        onClick={e => { e.stopPropagation(); onStickerPackLink(slug) }}
+        style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', font: 'inherit', padding: 0 }}
+      >
+        {match[0]}
+      </button>
+    )
+    last = match.index + match[0].length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return <span className={styles.msgContent}>{parts}</span>
+}
+
+function MessageBubble({ msg, isMe, onCtxMenu, onReact, showAvatar, emojiPickerMsgId, setEmojiPickerMsgId, onOpenMedia, onStickerPackLink }) {
   const senderName = msg.sender?.displayName || msg.sender?.username || 'Неизвестно'
   const time = fmtTime(msg.createdAt)
   const hasReactions = msg.reactions && Object.keys(msg.reactions).length > 0
@@ -579,8 +703,13 @@ function MessageBubble({ msg, isMe, onCtxMenu, onReact, showAvatar, emojiPickerM
               {msg.type === 'file' && msg.fileUrl && (
                 <FileAttachment url={msg.fileUrl} name={msg.fileName} size={msg.fileSize} />
               )}
+              {msg.type === 'sticker' && msg.fileUrl && (
+                <div className={styles.stickerMsg}>
+                  <img src={fullUrl(msg.fileUrl)} alt={msg.content || 'Стикер'} loading="lazy" />
+                </div>
+              )}
               {(!msg.type || msg.type === 'text') && msg.content && (
-                <span className={styles.msgContent}>{msg.content}</span>
+                detectOmLinks(msg.content, onStickerPackLink)
               )}
               {msg.type === 'text' && msg.fileUrl && (
                 <FileAttachment url={msg.fileUrl} name={msg.fileName} size={msg.fileSize} />

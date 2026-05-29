@@ -88,6 +88,7 @@
   transition: background 0.15s, color 0.15s;
 }
 .iconBtn:hover { background: var(--bg4); color: var(--text); }
+.iconBtnActive { background: var(--bg3) !important; color: var(--accent) !important; }
 
 .navTabs {
   display: flex;

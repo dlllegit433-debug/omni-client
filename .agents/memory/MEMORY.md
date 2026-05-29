@@ -1,0 +1,1 @@
+- [better-sqlite3 build](better-sqlite3-build.md) — requires Python for native compilation; must set via .npmrc or npm_config_python env var pointing to nix store Python.

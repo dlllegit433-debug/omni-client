@@ -8,6 +8,7 @@ import ServerView from '../components/server/ServerView'
 import ProfilePage from './ProfilePage'
 import ShopPage from './ShopPage'
 import AdminPage from './AdminPage'
+import CreatorPage from './CreatorPage'
 import styles from './MainPage.module.css'
 
 export default function MainPage({ getWs }) {
@@ -16,6 +17,8 @@ export default function MainPage({ getWs }) {
   useEffect(() => {
     loadConversations()
     loadServers()
+    loadMyStickers()
+    loadCustomEmojis()
   }, [])
 
   async function loadConversations() {
@@ -32,12 +35,23 @@ export default function MainPage({ getWs }) {
     }
   }
 
+  async function loadMyStickers() {
+    const res = await get('/api/my-sticker-packs')
+    if (res.ok) useStore.getState().setMyStickers(res.data.packs || [])
+  }
+
+  async function loadCustomEmojis() {
+    const res = await get('/api/custom-emojis')
+    if (res.ok) useStore.getState().setCustomEmojis(res.data.emojis || [])
+  }
+
   function renderMain() {
     if (view === 'profile') return <ProfilePage />
     if (view === 'shop') return <ShopPage />
     if (view === 'admin') return <AdminPage />
+    if (view === 'creator') return <CreatorPage />
     if (view === 'servers' && activeServerId) return <ServerView getWs={getWs} />
-    if (view === 'chats' && activeConvId) return <ChatView getWs={getWs} />
+    if (view === 'chats' && activeConvId) return <ChatView getWs={getWs} onStickerPackAdded={loadMyStickers} />
     return <EmptyState view={view} />
   }
 

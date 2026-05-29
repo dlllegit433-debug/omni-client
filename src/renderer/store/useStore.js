@@ -139,8 +139,14 @@ const useStore = create((set, get) => ({
     applyTheme(t)
   },
 
+  // Stickers & custom emojis
+  myStickers: [],   // user's added sticker packs with stickers
+  customEmojis: [], // all custom emojis
+  setMyStickers: (packs) => set({ myStickers: packs }),
+  setCustomEmojis: (emojis) => set({ customEmojis: emojis }),
+
   // View
-  view: 'chats', // 'chats' | 'servers' | 'profile' | 'shop' | 'admin'
+  view: 'chats', // 'chats' | 'servers' | 'profile' | 'shop' | 'admin' | 'creator'
   setView: (v) => set({ view: v }),
 }))
 

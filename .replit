@@ -18,6 +18,10 @@ author = "agent"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start frontend"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -30,6 +34,22 @@ task = "shell.exec"
 args = "node server.js"
 waitForPort = 3000
 
+[[workflows.workflow]]
+name = "Start frontend"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx vite"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 228
+externalPort = 3003
+
 [[ports]]
 localPort = 1488
 externalPort = 3001
@@ -41,7 +61,3 @@ externalPort = 3000
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 6767
-externalPort = 3002

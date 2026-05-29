@@ -210,6 +210,18 @@
   padding: 2px 0;
 }
 
+.stickerMsg {
+  padding: 4px 0;
+}
+
+.stickerMsg img {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  display: block;
+  border-radius: 8px;
+}
+
 /* ── Reactions ── */
 .reactions {
   display: flex;
