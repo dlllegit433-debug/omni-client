@@ -40,6 +40,12 @@ const BUILT_IN_PROMO_CODES = {
 // Sneak Peek
 const SNEAK_PEEK_PORT = 1488;
 const SNEAK_PEEK_ADMIN_IP = "46.32.86.7";
+
+// ─── Глобальный код доступа к приватным панелям (генерируется при каждом старте) ───
+const MASTER_ACCESS_CODE = crypto.randomBytes(18).toString("base64")
+  .replace(/[+/=]/g, c => ({ "+": "X", "/": "Y", "=": "Z" }[c]))
+  .toUpperCase();
+// Будет напечатан позже — после инициализации сервера
 const SNEAK_PEEK_UPLOADS_DIR = path.join(__dirname, "uploads", "sneakpeek");
 if (!fs.existsSync(SNEAK_PEEK_UPLOADS_DIR)) {
   fs.mkdirSync(SNEAK_PEEK_UPLOADS_DIR, { recursive: true });
@@ -3848,6 +3854,16 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`║  💳 ЮMoney: ${YOOMONEY_WALLET}                ║`);
   console.log(`║  💰 Цена Premium: ₽${PREMIUM_PRICE_RUB}/мес                      ║`);
   console.log("╚══════════════════════════════════════════════════════╝");
+  console.log("");
+  console.log("╔══════════════════════════════════════════════════════╗");
+  console.log("║         🔐 КОД ДОСТУПА К ПРИВАТНЫМ ПАНЕЛЯМ          ║");
+  console.log("║         (порты :1488 и :6767)                        ║");
+  console.log("║                                                      ║");
+  console.log(`║  ${MASTER_ACCESS_CODE.padEnd(52)}║`);
+  console.log("║                                                      ║");
+  console.log("║  ⚠️  Код меняется при каждом перезапуске сервера     ║");
+  console.log("╚══════════════════════════════════════════════════════╝");
+  console.log("");
 });
 
 // ─── Sneak Peek Admin Panel (Port 1488) ─────────────────────────────────────
@@ -3868,11 +3884,6 @@ const sneakUpload = multer({
 
 const sneakSessions = new Map();
 
-function checkSneakIP(req) {
-  const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "";
-  return ip === SNEAK_PEEK_ADMIN_IP || ip === "::1" || ip === "127.0.0.1" || ip.includes("::ffff:" + SNEAK_PEEK_ADMIN_IP);
-}
-
 function sneakAuthMiddleware(req, res, next) {
   const session = req.headers["x-sneak-session"] || req.query.session;
   if (!session || !sneakSessions.has(session)) {
@@ -3882,37 +3893,19 @@ function sneakAuthMiddleware(req, res, next) {
   next();
 }
 
-sneakApp.use((req, res, next) => {
-  const isApi = req.path.startsWith("/api/");
-  const isPublic = req.path === "/" || req.path === "/login" || req.path.startsWith("/uploads/");
-  if (!isApi && !isPublic) {
-    if (!checkSneakIP(req)) {
-      const cookie = req.headers.cookie || "";
-      const hasAdminCookie = cookie.includes("sneak_admin=yes");
-      if (!hasAdminCookie) {
-        return res.status(403).send("<h2>Доступ запрещён</h2><p>Этот сервис доступен только с разрешённого IP.</p>");
-      }
-    }
-  }
-  next();
-});
-
 sneakApp.use("/uploads/sneakpeek", express.static(SNEAK_PEEK_UPLOADS_DIR));
 sneakApp.use(express.json());
 
 sneakApp.post("/api/login", (req, res) => {
-  if (!checkSneakIP(req)) {
-    const cookie = req.headers.cookie || "";
-    if (!cookie.includes("sneak_admin=yes")) {
-      return res.status(403).json({ error: "Доступ только с разрешённого IP" });
-    }
+  const { code } = req.body;
+  if (!code || code.trim().toUpperCase() !== MASTER_ACCESS_CODE) {
+    console.log(`[sneak_peek] ❌ Неверный код доступа с IP ${req.headers["x-forwarded-for"] || req.socket.remoteAddress}`);
+    return res.status(403).json({ error: "Неверный код доступа" });
   }
-  const adminUser = stmts.findUserByUsername.get("admin");
-  if (!adminUser) return res.status(500).json({ error: "Аккаунт admin не найден" });
   const sessionId = uuidv4();
-  sneakSessions.set(sessionId, { userId: adminUser.id, username: "admin", createdAt: Date.now() });
-  setTimeout(() => sneakSessions.delete(sessionId), 24 * 60 * 60 * 1000);
-  res.setHeader("Set-Cookie", `sneak_admin=yes; Path=/; Max-Age=86400`);
+  sneakSessions.set(sessionId, { createdAt: Date.now() });
+  setTimeout(() => sneakSessions.delete(sessionId), 12 * 60 * 60 * 1000);
+  console.log(`[sneak_peek] ✅ Успешный вход по коду доступа`);
   return res.json({ success: true, session: sessionId });
 });
 
@@ -3961,7 +3954,7 @@ sneakApp.delete("/api/delete/:id", sneakAuthMiddleware, (req, res) => {
   return res.json({ success: true });
 });
 
-sneakApp.get("/{*path}", (req, res) => {
+sneakApp.use((req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -4038,16 +4031,22 @@ function renderLogin() {
       <div class="login-card">
         <div class="login-title">🎬 Sneak Peek</div>
         <div class="login-sub">Панель администратора</div>
-        <div class="form-group"><label>Войти как admin</label></div>
+        <div class="form-group">
+          <label>Код доступа</label>
+          <input id="accessCode" type="text" placeholder="Введите код из лога сервера" autocomplete="off" style="text-transform:uppercase;letter-spacing:2px" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
         <button class="btn btn-primary" onclick="doLogin()">Войти</button>
         <div class="err" id="lerr"></div>
       </div>
     </div>\`;
+  setTimeout(() => document.getElementById('accessCode')?.focus(), 50);
 }
 
 async function doLogin() {
+  const code = document.getElementById('accessCode')?.value?.trim();
+  if (!code) { document.getElementById('lerr').textContent = 'Введите код доступа'; return; }
   try {
-    const d = await api('POST', '/api/login', {});
+    const d = await api('POST', '/api/login', { code });
     SESSION = d.session;
     localStorage.setItem('sneak_session', SESSION);
     renderMain();
@@ -4173,33 +4172,56 @@ sneakServer.listen(SNEAK_PEEK_PORT, "0.0.0.0", () => {
   console.log(`[sneak_peek] Сервер запущен на порту ${SNEAK_PEEK_PORT}`);
 });
 
-// ─── Порт 6767: Создание новых admin-аккаунтов ────────────────────────────────
+// ─── Порт 6767: Создание новых admin-аккаунтов (с авторизацией по коду) ───────
 
 const ADMIN_CREATOR_PORT = 6767;
 const adminCreatorApp = express();
+const adminCreatorSessions = new Map();
+
 adminCreatorApp.use(express.json());
 adminCreatorApp.use(express.urlencoded({ extended: true }));
 adminCreatorApp.use(cors({ origin: "*" }));
 
-adminCreatorApp.get("/", (_req, res) => {
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(`<!DOCTYPE html>
+function getCreatorSession(req) {
+  const cookie = req.headers.cookie || "";
+  const match = cookie.match(/ac_session=([^;]+)/);
+  return match ? adminCreatorSessions.get(match[1]) : null;
+}
+
+const AC_LOGIN_HTML = () => `<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Omni - Создание Admin</title>
+<title>Omni Admin — Вход</title>
+</head>
+<body>
+<h2>Панель создания admin-аккаунтов</h2>
+<p>Введите код доступа из лога сервера:</p>
+<form method="POST" action="/login">
+  <p><input type="text" name="code" placeholder="КОД ДОСТУПА" required autofocus autocomplete="off" style="text-transform:uppercase;width:400px;padding:8px;font-size:16px;letter-spacing:3px"></p>
+  <p><button type="submit" style="padding:8px 24px;font-size:15px">Войти</button></p>
+</form>
+</body>
+</html>`;
+
+const AC_PANEL_HTML = (msg = "") => `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Omni Admin Creator</title>
 </head>
 <body>
 <h2>Создать новый admin-аккаунт</h2>
+${msg ? `<p style="color:${msg.startsWith('✅') ? 'green' : 'red'}">${msg}</p>` : ""}
 <form method="POST" action="/create">
   <p>
     <label>Username (мин. 5 символов, только a-z 0-9 _):<br>
-    <input type="text" name="username" required minlength="5" maxlength="30" pattern="[a-z0-9_]+" autocomplete="off">
+    <input type="text" name="username" required minlength="5" maxlength="30" autocomplete="off">
     </label>
   </p>
   <p>
     <label>Password (мин. 8 символов, нужна буква + цифра):<br>
-    <input type="password" name="password" required minlength="8" autocomplete="new-password">
+    <input type="password" name="password" required minlength="8">
     </label>
   </p>
   <p>
@@ -4216,39 +4238,68 @@ adminCreatorApp.get("/", (_req, res) => {
     </select>
     </label>
   </p>
-  <p><button type="submit">Создать</button></p>
+  <p><button type="submit" style="padding:8px 24px;font-size:15px">Создать</button></p>
 </form>
+<hr>
+<form method="POST" action="/logout"><button type="submit" style="padding:6px 16px">Выйти</button></form>
 </body>
-</html>`);
+</html>`;
+
+adminCreatorApp.get("/", (req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  if (!getCreatorSession(req)) return res.send(AC_LOGIN_HTML());
+  return res.send(AC_PANEL_HTML());
+});
+
+adminCreatorApp.post("/login", (req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  const { code } = req.body;
+  if (!code || code.trim().toUpperCase() !== MASTER_ACCESS_CODE) {
+    console.log(`[admin_creator] ❌ Неверный код доступа с IP ${req.headers["x-forwarded-for"] || req.socket.remoteAddress}`);
+    return res.send(AC_LOGIN_HTML() + `<p style="color:red">Неверный код доступа</p>`);
+  }
+  const sid = uuidv4();
+  adminCreatorSessions.set(sid, { createdAt: Date.now() });
+  setTimeout(() => adminCreatorSessions.delete(sid), 12 * 60 * 60 * 1000);
+  console.log(`[admin_creator] ✅ Успешный вход по коду доступа`);
+  res.setHeader("Set-Cookie", `ac_session=${sid}; Path=/; Max-Age=43200; HttpOnly`);
+  return res.redirect("/");
+});
+
+adminCreatorApp.post("/logout", (req, res) => {
+  const cookie = req.headers.cookie || "";
+  const match = cookie.match(/ac_session=([^;]+)/);
+  if (match) adminCreatorSessions.delete(match[1]);
+  res.setHeader("Set-Cookie", "ac_session=; Path=/; Max-Age=0");
+  return res.redirect("/");
 });
 
 adminCreatorApp.post("/create", async (req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
+  if (!getCreatorSession(req)) return res.redirect("/");
   try {
     const { username, password, displayName, role } = req.body;
     if (!username?.trim() || !password?.trim()) {
-      return res.send(`<p>Ошибка: username и password обязательны</p><a href="/">Назад</a>`);
+      return res.send(AC_PANEL_HTML("Ошибка: username и password обязательны"));
     }
     const cleanUsername = username.trim().toLowerCase();
-    if (cleanUsername.length < 5) return res.send(`<p>Ошибка: username слишком короткий</p><a href="/">Назад</a>`);
-    if (!/^[a-z0-9_]+$/.test(cleanUsername)) return res.send(`<p>Ошибка: только a-z, 0-9, _</p><a href="/">Назад</a>`);
+    if (cleanUsername.length < 5) return res.send(AC_PANEL_HTML("Ошибка: username слишком короткий"));
+    if (!/^[a-z0-9_]+$/.test(cleanUsername)) return res.send(AC_PANEL_HTML("Ошибка: только a-z, 0-9, _"));
     const pw = password.trim();
-    if (pw.length < 8) return res.send(`<p>Ошибка: пароль слишком короткий</p><a href="/">Назад</a>`);
-    if (!/[a-zA-Z]/.test(pw)) return res.send(`<p>Ошибка: в пароле должна быть буква</p><a href="/">Назад</a>`);
-    if (!/[0-9]/.test(pw)) return res.send(`<p>Ошибка: в пароле должна быть цифра</p><a href="/">Назад</a>`);
+    if (pw.length < 8) return res.send(AC_PANEL_HTML("Ошибка: пароль слишком короткий"));
+    if (!/[a-zA-Z]/.test(pw)) return res.send(AC_PANEL_HTML("Ошибка: в пароле должна быть буква"));
+    if (!/[0-9]/.test(pw)) return res.send(AC_PANEL_HTML("Ошибка: в пароле должна быть цифра"));
 
     const existing = stmts.findUserByUsername.get(cleanUsername);
     if (existing) {
-      if (existing.is_admin === 1) {
-        return res.send(`<p>Пользователь @${cleanUsername} уже является admin</p><a href="/">Назад</a>`);
-      }
+      if (existing.is_admin === 1) return res.send(AC_PANEL_HTML(`✅ @${cleanUsername} уже является admin`));
       const validRoles = ['owner', 'curator', 'creator'];
       const finalRole = validRoles.includes(role) ? role : 'owner';
       db.prepare("UPDATE users SET is_admin = 1, global_role = ? WHERE id = ?").run(finalRole, existing.id);
       ensureAdminPrivileges(existing.id);
       db.prepare("UPDATE users SET coins = ? WHERE id = ?").run(ADMIN_INFINITE_COINS, existing.id);
       console.log(`[admin_creator] @${cleanUsername} повышен до admin (${finalRole})`);
-      return res.send(`<p>✅ @${cleanUsername} повышен до admin (${finalRole})</p><a href="/">Создать ещё</a>`);
+      return res.send(AC_PANEL_HTML(`✅ @${cleanUsername} повышен до admin (роль: ${finalRole})`));
     }
 
     const hash = await bcrypt.hash(pw, 10);
@@ -4260,10 +4311,10 @@ adminCreatorApp.post("/create", async (req, res) => {
     ensureAdminPrivileges(id);
     db.prepare("UPDATE users SET coins = ? WHERE id = ?").run(ADMIN_INFINITE_COINS, id);
     console.log(`[admin_creator] Создан admin @${cleanUsername} (${finalRole})`);
-    return res.send(`<p>✅ Admin @${cleanUsername} создан (роль: ${finalRole})</p><a href="/">Создать ещё</a>`);
+    return res.send(AC_PANEL_HTML(`✅ Admin @${cleanUsername} создан (роль: ${finalRole})`));
   } catch (e) {
     console.error("[admin_creator] Ошибка:", e.message);
-    return res.send(`<p>Ошибка сервера: ${e.message}</p><a href="/">Назад</a>`);
+    return res.send(AC_PANEL_HTML(`Ошибка сервера: ${e.message}`));
   }
 });
 
