@@ -1,0 +1,230 @@
+.root {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg0);
+}
+
+.page {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.balance {
+  font-size: 15px;
+  color: var(--text2);
+  background: var(--bg3);
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+
+.tabs {
+  display: flex;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.tab {
+  flex: 1;
+  padding: 9px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--text); }
+.tabActive { background: var(--bg4); color: var(--text); }
+
+.giftsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.giftCard {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.giftCard:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+.giftEmoji { font-size: 36px; }
+.giftName { font-size: 13px; font-weight: 600; color: var(--text); }
+.giftRarity { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.giftPrice { font-size: 12px; color: var(--text3); }
+
+.giftBtn {
+  margin-top: 4px;
+  width: 100%;
+  padding: 7px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.giftBtn:hover { background: var(--acc2); }
+
+.coinsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.coinCard {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  transition: border-color 0.15s;
+}
+.coinCard:hover { border-color: var(--accent); }
+.coinCardPopular { border-color: var(--accent) !important; background: rgba(124,58,237,0.05); }
+
+.popularBadge {
+  position: absolute;
+  top: -10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.coinIcon { font-size: 36px; }
+.coinAmount { font-size: 18px; font-weight: 700; color: var(--text); }
+.coinLabel { font-size: 12px; color: var(--text3); }
+.coinPrice { font-size: 20px; font-weight: 700; color: var(--accent); }
+
+.buyBtn {
+  width: 100%;
+  padding: 10px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.buyBtn:hover { background: var(--acc2); }
+
+.historyList { display: flex; flex-direction: column; gap: 4px; }
+
+.empty { text-align: center; color: var(--text3); font-size: 13px; padding: 32px; }
+
+.historyRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.historyIcon { font-size: 20px; }
+.historyInfo { flex: 1; }
+.historyDesc { display: block; font-size: 13px; color: var(--text); }
+.historyDate { font-size: 11px; color: var(--text3); }
+.historyAmount { font-size: 14px; font-weight: 700; }
+.plus { color: var(--green); }
+.minus { color: var(--red); }
+
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 500;
+}
+
+.giftModalBox {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.giftModalIcon { font-size: 52px; }
+.giftModalName { font-size: 18px; font-weight: 700; color: var(--text); }
+.giftModalPrice { font-size: 13px; color: var(--text2); }
+
+.giftModalInput {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text);
+  text-align: center;
+  user-select: text;
+  margin-top: 4px;
+}
+.giftModalInput::placeholder { color: var(--text3); }
+.giftModalInput:focus { border-color: var(--accent); }
+
+.giftModalBtns { display: flex; gap: 8px; width: 100%; }
+
+.cancelBtn {
+  flex: 1; padding: 10px;
+  background: var(--bg4);
+  color: var(--text2);
+  border-radius: 10px;
+  font-size: 13px; font-weight: 600;
+  transition: background 0.15s;
+}
+.cancelBtn:hover { background: var(--bg5); }
+
+.sendGiftBtn {
+  flex: 2; padding: 10px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 13px; font-weight: 600;
+  transition: background 0.15s;
+}
+.sendGiftBtn:hover { background: var(--acc2); }
