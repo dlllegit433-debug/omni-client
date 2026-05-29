@@ -3163,11 +3163,23 @@ app.get("/api/admin/users/:id/moderation", adminMiddleware, (req, res) => {
   });
 });
 
+function checkRoleHierarchy(req, targetUser) {
+  const requester = req.user;
+  const requesterRole = requester.global_role || "user";
+  const targetRole = targetUser.global_role || "user";
+  if (requesterRole === "creator") return null;
+  if (targetRole === "creator") return "Нельзя применить действие к Creator";
+  if (targetRole === "curator" && requesterRole !== "creator") return "Нельзя применить действие к Curator";
+  return null;
+}
+
 app.post("/api/admin/users/:id/ban", adminMiddleware, (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const user = stmts.findUserById.get(id);
   if (!user) return res.status(404).json({ error: "Пользователь не найден" });
+  const err = checkRoleHierarchy(req, user);
+  if (err) return res.status(403).json({ error: err });
   db.prepare(`INSERT INTO user_moderation (user_id, is_banned, ban_reason, updated_at)
     VALUES (?, 1, ?, datetime('now'))
     ON CONFLICT(user_id) DO UPDATE SET is_banned = 1, ban_reason = ?, updated_at = datetime('now')`).run(id, reason || null, reason || null);
@@ -3190,6 +3202,7 @@ app.post("/api/admin/users/:id/unban", adminMiddleware, (req, res) => {
 app.post("/api/admin/users/:id/freeze", adminMiddleware, (req, res) => {
   const { id } = req.params;
   const user = stmts.findUserById.get(id);
+  if (user) { const err = checkRoleHierarchy(req, user); if (err) return res.status(403).json({ error: err }); }
   if (!user) return res.status(404).json({ error: "Пользователь не найден" });
   db.prepare(`INSERT INTO user_moderation (user_id, is_frozen, updated_at)
     VALUES (?, 1, datetime('now'))
@@ -3215,6 +3228,8 @@ app.post("/api/admin/users/:id/mute", adminMiddleware, (req, res) => {
   const { minutes = 60 } = req.body;
   const user = stmts.findUserById.get(id);
   if (!user) return res.status(404).json({ error: "Пользователь не найден" });
+  const roleErr = checkRoleHierarchy(req, user);
+  if (roleErr) return res.status(403).json({ error: roleErr });
   const muteUntil = new Date(Date.now() + Number(minutes) * 60000).toISOString().replace("T", " ").slice(0, 19);
   db.prepare(`INSERT INTO user_moderation (user_id, is_muted, mute_until, updated_at)
     VALUES (?, 1, ?, datetime('now'))
