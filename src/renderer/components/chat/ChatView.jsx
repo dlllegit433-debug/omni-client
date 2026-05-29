@@ -7,6 +7,8 @@ import styles from './ChatView.module.css'
 
 const EMOJI_LIST = ['👍','❤️','😂','😮','😢','😡','🔥','🎉','💯','👏','🤔','😍']
 
+const BASE_URL = 'https://omnii.duckdns.org:3000'
+
 export default function ChatView({ getWs }) {
   const { me, conversations, activeConvId, messages, setMessages,
     typing, setActiveConv } = useStore()
@@ -171,11 +173,18 @@ export default function ChatView({ getWs }) {
   // Group messages by date
   const grouped = groupByDate(msgs)
 
+  const wallpaperUrl = me?.wallpaper
+    ? (me.wallpaper.startsWith('http') ? me.wallpaper : BASE_URL + me.wallpaper)
+    : null
+  const otherAvatarUrl = otherUser?.avatar
+    ? (otherUser.avatar.startsWith('http') ? otherUser.avatar : BASE_URL + otherUser.avatar)
+    : null
+
   return (
     <div className={styles.root} onClick={() => { setCtxMenu(null); setEmojiPicker(null) }}>
       {/* Header */}
       <div className={styles.header}>
-        <Avatar name={chatName} size={36} />
+        <Avatar name={chatName} size={36} src={otherAvatarUrl} />
         <div className={styles.headerInfo}>
           <span className={styles.headerName}>{chatName}</span>
           {streak > 0 && <span className={styles.streak}>🔥 {streak}</span>}
@@ -197,7 +206,12 @@ export default function ChatView({ getWs }) {
       </div>
 
       {/* Messages */}
-      <div className={styles.messages}>
+      <div className={styles.messages} style={wallpaperUrl ? {
+        backgroundImage: `url(${wallpaperUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'local',
+      } : undefined}>
         {loadingHistory && <div className={styles.loading}>Загрузка...</div>}
         {grouped.map(({ date, messages: dayMsgs }) => (
           <React.Fragment key={date}>

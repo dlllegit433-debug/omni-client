@@ -6,6 +6,14 @@ import ServerBrowser from './server/ServerBrowser'
 import NewChatModal from './chat/NewChatModal'
 import styles from './Sidebar.module.css'
 
+const BASE_URL = 'https://omnii.duckdns.org:3000'
+
+const ROLE_COLORS = {
+  creator: '#4c1d95',
+  curator: '#0c4a6e',
+  owner:   '#92400e',
+}
+
 export default function Sidebar({ getWs, onRefreshConvs, onRefreshServers }) {
   const { me, view, setView, conversations, activeConvId, setActiveConv,
     servers, activeServerId, setActiveServer, unread, wsConnected, logout } = useStore()
@@ -18,22 +26,36 @@ export default function Sidebar({ getWs, onRefreshConvs, onRefreshServers }) {
     return name.toLowerCase().includes(search.toLowerCase())
   })
 
+  const avatarUrl = me?.avatar ? (me.avatar.startsWith('http') ? me.avatar : BASE_URL + me.avatar) : null
+  const roleColor = ROLE_COLORS[me?.globalRole]
+
+  const displayNameStyle = me?.nicknameRainbow
+    ? { backgroundImage: 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontFamily: me.nicknameFont || undefined }
+    : { color: me?.nicknameColor || undefined, fontFamily: me?.nicknameFont || undefined }
+
   function handleLogout() {
     useStore.getState().logout()
+    localStorage.removeItem('omni_session')
     window.electron?.config.save({})
   }
 
   return (
     <aside className={styles.sidebar}>
-      {/* User header */}
       <div className={styles.userBar}>
         <div className={styles.userInfo} onClick={() => setView('profile')}>
           <div className={styles.avatarWrap}>
-            <Avatar name={me?.displayName || me?.username} size={34} />
+            <Avatar name={me?.displayName || me?.username} size={34} src={avatarUrl} />
             <span className={`${styles.dot} ${wsConnected ? styles.dotGreen : styles.dotGray}`} />
           </div>
           <div className={styles.userName}>
-            <span className={styles.displayName}>{me?.displayName || me?.username}</span>
+            <div className={styles.nameRow}>
+              <span className={styles.displayName} style={displayNameStyle}>
+                {me?.displayName || me?.username}
+              </span>
+              {roleColor && (
+                <span className={styles.roleIndicator} style={{ background: roleColor }} />
+              )}
+            </div>
             <span className={styles.statusText}>{wsConnected ? 'В сети' : 'Не в сети'}</span>
           </div>
         </div>
@@ -59,7 +81,6 @@ export default function Sidebar({ getWs, onRefreshConvs, onRefreshServers }) {
         </div>
       </div>
 
-      {/* Nav tabs */}
       <div className={styles.navTabs}>
         <button className={`${styles.navTab} ${view === 'chats' ? styles.navTabActive : ''}`}
           onClick={() => setView('chats')}>
@@ -144,6 +165,9 @@ export default function Sidebar({ getWs, onRefreshConvs, onRefreshServers }) {
 }
 
 function ConvItem({ conv, active, unread, onClick }) {
+  const otherUserAvatarUrl = conv.otherUser?.avatar
+    ? (conv.otherUser.avatar.startsWith('http') ? conv.otherUser.avatar : 'https://omnii.duckdns.org:3000' + conv.otherUser.avatar)
+    : null
   const name = conv.otherUser?.displayName || conv.otherUser?.username || conv.name || 'Группа'
   const lastMsg = conv.lastMessage?.content || ''
   const time = conv.lastMessageAt ? fmtTime(conv.lastMessageAt) : ''
@@ -152,7 +176,7 @@ function ConvItem({ conv, active, unread, onClick }) {
   return (
     <div className={`${styles.convItem} ${active ? styles.convActive : ''}`} onClick={onClick}>
       <div className={styles.convAvatar}>
-        <Avatar name={name} size={38} />
+        <Avatar name={name} size={38} src={otherUserAvatarUrl} />
         {isGroup && <span className={styles.groupBadge}>G</span>}
       </div>
       <div className={styles.convInfo}>

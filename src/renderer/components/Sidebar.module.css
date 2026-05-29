@@ -45,6 +45,12 @@
 
 .userName { overflow: hidden; }
 
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .displayName {
   display: block;
   font-size: 13px;
@@ -53,6 +59,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.roleIndicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
 }
 
 .statusText {
