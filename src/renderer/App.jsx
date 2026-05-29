@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import useStore, { applyTheme } from './store/useStore'
 import { get, post } from './lib/api'
 import { WSClient } from './lib/ws'
+import { callManager } from './lib/webrtc'
 import AuthPage from './pages/AuthPage'
 import MainPage from './pages/MainPage'
 import ToastContainer from './components/ToastContainer'
@@ -22,7 +23,6 @@ export default function App() {
 
   useEffect(() => {
     applyTheme('violet')
-    // Load saved session
     ;(async () => {
       try {
         let cfg = {}
@@ -55,18 +55,13 @@ export default function App() {
     }
 
     const ws = new WSClient({
-      onConnect: () => {
-        setWsConnected(true)
-      },
-      onDisconnect: () => {
-        setWsConnected(false)
-      },
+      onConnect: () => setWsConnected(true),
+      onDisconnect: () => setWsConnected(false),
       onMessage: (msg) => handleWsMessage(msg),
     })
     ws.connect(token)
     wsInstance = ws
     wsRef.current = ws
-
     pingRef.current = setInterval(() => ws.send({ type: 'ping' }), 30000)
 
     return () => {
@@ -86,14 +81,19 @@ export default function App() {
         if (conversationId !== store.activeConvId) {
           store.incrementUnread(conversationId)
           if (message.sender?.id !== store.me?.id) {
+            const body = message.type === 'audio' ? '🎤 Голосовое сообщение'
+              : message.type === 'image' ? '🖼 Фото'
+              : message.type === 'video' ? '🎬 Видео'
+              : message.type === 'file' ? '📎 Файл'
+              : message.content
             store.addToast({
               title: message.sender?.displayName || message.sender?.username,
-              body: message.content,
+              body,
               type: 'message',
             })
             window.electron?.notify({
               title: message.sender?.displayName || message.sender?.username,
-              body: message.content?.slice(0, 80),
+              body: body?.slice(0, 80),
             })
           }
         }
@@ -131,28 +131,29 @@ export default function App() {
         break
       }
       case 'call_accepted': {
-        store.setActiveCall(store.activeCall ? { ...store.activeCall, state: 'connected', startTime: Date.now() } : null)
+        callManager.setRemoteAnswer(msg.answer)
+        store.setActiveCall(prev => prev ? { ...prev, state: 'connected', startTime: Date.now() } : null)
         break
       }
       case 'call_rejected': {
-        store.activeCall?.audio?.stop()
+        callManager.hangup()
         store.setActiveCall(null)
         store.addToast({ title: 'Звонок', body: 'Собеседник отклонил звонок', type: 'info' })
         break
       }
       case 'call_ended': {
-        store.activeCall?.audio?.stop()
+        callManager.hangup()
         store.setActiveCall(null)
         break
       }
       case 'call_unavailable': {
-        store.activeCall?.audio?.stop()
+        callManager.hangup()
         store.setActiveCall(null)
         store.addToast({ title: 'Звонок', body: 'Пользователь недоступен', type: 'info' })
         break
       }
-      case 'call_audio': {
-        store.activeCall?.audio?.receive(msg.audio)
+      case 'call_ice': {
+        callManager.addIceCandidate(msg.candidate)
         break
       }
       case 'coins_added': {
@@ -182,10 +183,6 @@ export default function App() {
       case 'new_channel_message': {
         const { channelId, message } = msg
         store.appendChannelMessage(channelId, message)
-        break
-      }
-      case 'channel_message_edited': {
-        // handled by server panel
         break
       }
     }

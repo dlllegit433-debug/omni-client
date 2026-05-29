@@ -1772,7 +1772,10 @@ app.post("/api/conversations/:id/upload", authMiddleware, upload.single("file"),
   const host = req.headers["x-forwarded-host"] || req.headers.host;
   const fileUrl = `${proto}://${host}/uploads/${req.file.filename}`;
   const msgId = uuidv4();
-  const msgType = req.file.mimetype.startsWith("video/") ? "video" : "image";
+  const msgType = req.file.mimetype.startsWith("video/") ? "video"
+    : req.file.mimetype.startsWith("audio/") ? "audio"
+    : req.file.mimetype.startsWith("image/") ? "image"
+    : "file";
 
   stmts.insertMessage.run(msgId, id, req.user.id, null, msgType,
     fileUrl, req.file.originalname, req.file.size, req.file.mimetype, null);
@@ -2967,7 +2970,10 @@ app.post("/api/channels/:id/upload", authMiddleware, upload.single("file"), (req
   const host = req.headers["x-forwarded-host"] || req.headers.host;
   const fileUrl = `${proto}://${host}/uploads/${req.file.filename}`;
   const msgId = uuidv4();
-  const msgType = req.file.mimetype.startsWith("video/") ? "video" : req.file.mimetype.startsWith("image/") ? "image" : "file";
+  const msgType = req.file.mimetype.startsWith("video/") ? "video"
+    : req.file.mimetype.startsWith("audio/") ? "audio"
+    : req.file.mimetype.startsWith("image/") ? "image"
+    : "file";
 
   stmts.insertChannelMessage.run(msgId, channel.id, req.user.id, null, msgType,
     fileUrl, req.file.originalname, req.file.size, req.file.mimetype, null);
