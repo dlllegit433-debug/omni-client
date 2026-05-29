@@ -4318,6 +4318,13 @@ adminCreatorApp.post("/create", async (req, res) => {
   }
 });
 
-adminCreatorApp.listen(ADMIN_CREATOR_PORT, "0.0.0.0", () => {
+let adminCreatorServer;
+if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
+  const sslOptions = { key: fs.readFileSync(sslKeyPath), cert: fs.readFileSync(sslCertPath) };
+  adminCreatorServer = https.createServer(sslOptions, adminCreatorApp);
+} else {
+  adminCreatorServer = http.createServer(adminCreatorApp);
+}
+adminCreatorServer.listen(ADMIN_CREATOR_PORT, "0.0.0.0", () => {
   console.log(`[admin_creator] Панель создания adminов запущена на порту ${ADMIN_CREATOR_PORT}`);
 });
