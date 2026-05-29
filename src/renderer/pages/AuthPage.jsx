@@ -183,7 +183,11 @@ async function finishAuth(data, setAuth) {
   const { token, ...me } = data
   setAuth(token, me)
   applyTheme(me.theme || 'violet')
-  await window.electron?.config.save({ token })
+  if (window.electron) {
+    await window.electron.config.save({ token })
+  } else {
+    localStorage.setItem('omni_session', JSON.stringify({ token }))
+  }
 }
 
 function Input({ label, value, onChange, type = 'text', placeholder }) {

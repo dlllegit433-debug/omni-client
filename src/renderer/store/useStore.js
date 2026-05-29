@@ -49,6 +49,7 @@ const useStore = create((set, get) => ({
   })),
   appendMessage: (convId, msg) => set(s => {
     const prev = s.messages[convId] || []
+    if (prev.some(m => m.id === msg.id)) return {}
     return { messages: { ...s.messages, [convId]: [...prev, msg] } }
   }),
   updateMessage: (convId, msgId, fields) => set(s => {

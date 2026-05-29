@@ -25,12 +25,20 @@ export default function App() {
     // Load saved session
     ;(async () => {
       try {
-        const cfg = await window.electron?.config.load() || {}
+        let cfg = {}
+        if (window.electron) {
+          cfg = await window.electron.config.load() || {}
+        } else {
+          const saved = localStorage.getItem('omni_session')
+          cfg = saved ? JSON.parse(saved) : {}
+        }
         if (cfg.token) {
           const res = await get('/api/auth/me', { token: cfg.token })
           if (res.ok) {
             setAuth(cfg.token, res.data)
             applyTheme(res.data.theme || 'violet')
+          } else {
+            localStorage.removeItem('omni_session')
           }
         }
       } catch {}

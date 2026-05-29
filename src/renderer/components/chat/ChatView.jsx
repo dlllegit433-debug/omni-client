@@ -73,15 +73,19 @@ export default function ChatView({ getWs }) {
   async function sendMessage() {
     const content = input.trim()
     if (!content && !uploading) return
+    const savedReplyTo = replyTo
     setInput('')
     setReplyTo(null)
 
-    const ws = getWs()
     const res = await post(`/api/conversations/${activeConvId}/messages`, {
-      json: { content, replyTo: replyTo?.id }
+      json: { content, replyTo: savedReplyTo?.id }
     })
     if (res.ok) {
-      // message comes back via WS, but also append directly
+      const msg = res.data.message || res.data
+      if (msg && msg.id) {
+        useStore.getState().appendMessage(activeConvId, msg)
+        useStore.getState().updateConvLastMessage(activeConvId, msg)
+      }
     }
   }
 
