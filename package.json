@@ -1,6 +1,6 @@
 {
   "name": "omni-client",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Omni Desktop Messenger",
   "main": "src/main/main.js",
   "scripts": {
