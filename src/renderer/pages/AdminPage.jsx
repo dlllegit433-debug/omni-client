@@ -32,6 +32,8 @@ export default function AdminPage() {
   const [coinsAmount, setCoinsAmount] = useState('')
   const [muteModal, setMuteModal] = useState(null)
   const [muteMinutes, setMuteMinutes] = useState(60)
+  const [banModal, setBanModal] = useState(null)
+  const [banReason, setBanReason] = useState('Нарушение правил')
 
   const isCreator = me?.globalRole === 'creator'
   const isCurator = me?.globalRole === 'curator'
@@ -70,8 +72,14 @@ export default function AdminPage() {
   }
 
   async function banUser(u) {
-    const reason = prompt(`Причина бана для @${u.username}:`, 'Нарушение правил') || 'Нарушение правил'
-    const res = await post(`/api/admin/users/${u.id}/ban`, { json: { reason } })
+    setBanModal(u)
+    setBanReason('Нарушение правил')
+  }
+
+  async function confirmBan() {
+    const u = banModal
+    setBanModal(null)
+    const res = await post(`/api/admin/users/${u.id}/ban`, { json: { reason: banReason || 'Нарушение правил' } })
     if (res.ok) { addToast({ title: `@${u.username} забанен`, type: 'success' }); loadUsers(userSearch) }
     else addToast({ title: res.data?.error || 'Ошибка', type: 'error' })
   }
@@ -335,6 +343,25 @@ export default function AdminPage() {
               </button>
             </div>
             <button className={styles.modalClose} onClick={() => setMuteModal(null)}>Отмена</button>
+          </div>
+        </div>
+      )}
+
+      {banModal && (
+        <div className={styles.modalOverlay} onClick={() => setBanModal(null)}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalTitle}>🚫 Бан @{banModal.username}</div>
+            <input
+              className={styles.input}
+              placeholder="Причина бана"
+              value={banReason}
+              onChange={e => setBanReason(e.target.value)}
+              style={{ marginBottom: 12 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className={styles.aBtnRed} onClick={confirmBan}>Забанить</button>
+              <button className={styles.modalClose} onClick={() => setBanModal(null)}>Отмена</button>
+            </div>
           </div>
         </div>
       )}

@@ -721,9 +721,9 @@ function MessageBubble({ msg, isMe, onCtxMenu, onReact, showAvatar, emojiPickerM
 
         {hasReactions && (
           <div className={styles.reactions}>
-            {Object.entries(msg.reactions).map(([emoji, count]) => (
+            {Object.entries(msg.reactions).map(([emoji, users]) => (
               <button key={emoji} className={styles.reactionBtn} onClick={() => onReact(emoji)}>
-                {emoji} <span>{count}</span>
+                {emoji} <span>{Array.isArray(users) ? users.length : users}</span>
               </button>
             ))}
           </div>

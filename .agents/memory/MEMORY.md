@@ -1,3 +1,5 @@
 - [better-sqlite3 build](better-sqlite3-build.md) — requires Python for native compilation; must set via .npmrc or npm_config_python env var pointing to nix store Python.
 - [server.js corruption guard](server-js-guard.md) — editing server.js with very large new_string can corrupt/truncate the file; always restore from git if file shrinks unexpectedly.
 - [catalog routing](catalog-routing.md) — catalog HTML is served at GET /catalog on main app (port 3000), not a separate port; avoids .replit port mapping restrictions.
+- [conversations otherUser](conversations-other-user.md) — getConversationDetail() doesn't know who "me" is; otherUser must be derived at the endpoint level from req.user.id.
+- [reactions format](reactions-format.md) — reactions are stored as {emoji: [{userId,username}]} (arrays); frontend must use Array.isArray(users) ? users.length : users to render count safely.
