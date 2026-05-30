@@ -1,0 +1,20 @@
+[ssl] SSL сертификаты не найдены, запуск на HTTP
+/home/runner/workspace/node_modules/path-to-regexp/dist/index.js:108
+                    throw new PathError(`Missing parameter name at index ${index}`, str);
+                    ^
+
+PathError [TypeError]: Missing parameter name at index 1: *; visit https://git.new/pathToRegexpError for info
+    at consumeUntil [90m(/home/runner/workspace/[39mnode_modules/[4mpath-to-regexp[24m/dist/index.js:108:27[90m)[39m
+    at parse [90m(/home/runner/workspace/[39mnode_modules/[4mpath-to-regexp[24m/dist/index.js:140:26[90m)[39m
+    at process [90m(/home/runner/workspace/[39mnode_modules/[4mpath-to-regexp[24m/dist/index.js:263:56[90m)[39m
+    at pathToRegexp [90m(/home/runner/workspace/[39mnode_modules/[4mpath-to-regexp[24m/dist/index.js:274:5[90m)[39m
+    at Object.match [90m(/home/runner/workspace/[39mnode_modules/[4mpath-to-regexp[24m/dist/index.js:225:30[90m)[39m
+    at matcher [90m(/home/runner/workspace/[39mnode_modules/[4mrouter[24m/lib/layer.js:86:23[90m)[39m
+    at new Layer [90m(/home/runner/workspace/[39mnode_modules/[4mrouter[24m/lib/layer.js:93:62[90m)[39m
+    at Function.route [90m(/home/runner/workspace/[39mnode_modules/[4mrouter[24m/index.js:428:17[90m)[39m
+    at Function.route [90m(/home/runner/workspace/[39mnode_modules/[4mexpress[24m/lib/application.js:257:22[90m)[39m
+    at app.<computed> [as get] [90m(/home/runner/workspace/[39mnode_modules/[4mexpress[24m/lib/application.js:478:22[90m)[39m {
+  originalPath: [32m'*'[39m
+}
+
+Node.js v20.20.0

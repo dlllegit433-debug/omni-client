@@ -1,0 +1,45 @@
+/home/runner/workspace/node_modules/bindings/bindings.js:135
+  throw err;
+  ^
+
+Error: Could not locate the bindings file. Tried:
+ → /home/runner/workspace/node_modules/better-sqlite3/build/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/build/Debug/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/build/Release/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/out/Debug/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/Debug/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/out/Release/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/Release/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/build/default/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/compiled/20.20.0/linux/x64/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/addon-build/release/install-root/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/addon-build/debug/install-root/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/addon-build/default/install-root/better_sqlite3.node
+ → /home/runner/workspace/node_modules/better-sqlite3/lib/binding/node-v115-linux-x64/better_sqlite3.node
+    at bindings [90m(/home/runner/workspace/[39mnode_modules/[4mbindings[24m/bindings.js:126:9[90m)[39m
+    at new Database [90m(/home/runner/workspace/[39mnode_modules/[4mbetter-sqlite3[24m/lib/database.js:48:64[90m)[39m
+    at Object.<anonymous> [90m(/home/runner/workspace/[39mserver.js:69:12[90m)[39m
+[90m    at Module._compile (node:internal/modules/cjs/loader:1521:14)[39m
+[90m    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)[39m
+[90m    at Module.load (node:internal/modules/cjs/loader:1266:32)[39m
+[90m    at Module._load (node:internal/modules/cjs/loader:1091:12)[39m
+[90m    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)[39m
+[90m    at node:internal/main/run_main_module:28:49[39m {
+  tries: [
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/build/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/build/Debug/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/build/Release/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/out/Debug/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/Debug/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/out/Release/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/Release/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/build/default/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/compiled/20.20.0/linux/x64/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/addon-build/release/install-root/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/addon-build/debug/install-root/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/addon-build/default/install-root/better_sqlite3.node'[39m,
+    [32m'/home/runner/workspace/node_modules/better-sqlite3/lib/binding/node-v115-linux-x64/better_sqlite3.node'[39m
+  ]
+}
+
+Node.js v20.20.0
