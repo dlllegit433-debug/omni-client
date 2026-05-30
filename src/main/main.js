@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Notification } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, Notification, Tray, Menu, nativeImage } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -20,6 +20,49 @@ function saveConfig(data) {
 }
 
 let mainWindow
+let tray = null
+let forceQuit = false
+
+function createTray() {
+  const iconPath = path.join(__dirname, '../../src/renderer/assets/icon.ico')
+  let trayIcon
+  try {
+    trayIcon = nativeImage.createFromPath(iconPath)
+  } catch {
+    trayIcon = nativeImage.createEmpty()
+  }
+
+  tray = new Tray(trayIcon)
+  tray.setToolTip('Omni Messenger')
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Открыть Omni',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Выйти',
+      click: () => {
+        forceQuit = true
+        app.quit()
+      }
+    }
+  ])
+
+  tray.setContextMenu(contextMenu)
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -49,16 +92,40 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
   })
+
+  mainWindow.on('close', (e) => {
+    if (forceQuit) return
+    const cfg = loadConfig()
+    if (cfg.minimizeToTray !== false) {
+      e.preventDefault()
+      mainWindow.hide()
+    }
+  })
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createTray()
+  createWindow()
+
+  const cfg = loadConfig()
+  if (cfg.autoStart !== undefined) {
+    app.setLoginItemSettings({ openAtLogin: !!cfg.autoStart })
+  }
+})
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin') {
+    // Don't quit — stay in tray
+  }
+})
+
+app.on('before-quit', () => {
+  forceQuit = true
 })
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  else if (mainWindow) mainWindow.show()
 })
 
 ipcMain.handle('config:load', () => loadConfig())
@@ -69,13 +136,50 @@ ipcMain.handle('window:maximize', () => {
   if (mainWindow?.isMaximized()) mainWindow.unmaximize()
   else mainWindow?.maximize()
 })
-ipcMain.handle('window:close', () => mainWindow?.close())
+ipcMain.handle('window:close', () => {
+  const cfg = loadConfig()
+  if (cfg.minimizeToTray !== false) {
+    mainWindow?.hide()
+  } else {
+    forceQuit = true
+    mainWindow?.close()
+  }
+})
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+ipcMain.handle('window:show', () => { mainWindow?.show(); mainWindow?.focus() })
 
 ipcMain.handle('notify', (_, { title, body }) => {
   if (Notification.isSupported()) {
-    new Notification({ title, body }).show()
+    const n = new Notification({ title, body })
+    n.on('click', () => { mainWindow?.show(); mainWindow?.focus() })
+    n.show()
   }
 })
 
 ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url))
+
+ipcMain.handle('autostart:get', () => {
+  return app.getLoginItemSettings().openAtLogin
+})
+
+ipcMain.handle('autostart:set', (_, enabled) => {
+  app.setLoginItemSettings({ openAtLogin: !!enabled })
+  const cfg = loadConfig()
+  saveConfig({ ...cfg, autoStart: !!enabled })
+  return true
+})
+
+ipcMain.handle('tray:setMinimizeToTray', (_, enabled) => {
+  const cfg = loadConfig()
+  saveConfig({ ...cfg, minimizeToTray: !!enabled })
+  return true
+})
+
+ipcMain.handle('window:forceOpen', () => {
+  if (mainWindow) {
+    mainWindow.show()
+    mainWindow.focus()
+    mainWindow.setAlwaysOnTop(true)
+    setTimeout(() => mainWindow?.setAlwaysOnTop(false), 10000)
+  }
+})

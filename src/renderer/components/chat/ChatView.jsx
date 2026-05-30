@@ -29,7 +29,7 @@ function fullUrl(url) {
 }
 
 export default function ChatView({ getWs, onStickerPackAdded }) {
-  const { me, conversations, activeConvId, messages, setMessages, typing, myStickers } = useStore()
+  const { me, conversations, activeConvId, messages, setMessages, typing, myStickers, setViewingUser } = useStore()
 
   const conv = conversations.find(c => c.id === activeConvId)
   const msgs = messages[activeConvId] || []
@@ -316,10 +316,17 @@ export default function ChatView({ getWs, onStickerPackAdded }) {
     <div className={styles.root}>
       {/* Header */}
       <div className={styles.header}>
-        <Avatar name={chatName} size={36} src={otherAvatarUrl} />
-        <div className={styles.headerInfo}>
-          <span className={styles.headerName}>{chatName}</span>
-          {streak > 0 && <span className={styles.streak}>🔥 {streak}</span>}
+        <div
+          className={styles.headerProfile}
+          onClick={() => otherUser && setViewingUser(otherUser.id)}
+          title={otherUser ? 'Посмотреть профиль' : undefined}
+          style={{ cursor: otherUser ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <Avatar name={chatName} size={36} src={otherAvatarUrl} />
+          <div className={styles.headerInfo}>
+            <span className={styles.headerName}>{chatName}</span>
+            {streak > 0 && <span className={styles.streak}>🔥 {streak}</span>}
+          </div>
         </div>
         <div className={styles.headerActions}>
           <button className={styles.hBtn} onClick={loadPinned} title="Закреплённые">

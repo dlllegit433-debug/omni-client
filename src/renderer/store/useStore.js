@@ -1,6 +1,23 @@
 import { create } from 'zustand'
 import { setToken } from '../lib/api'
 
+const DEFAULT_SETTINGS = {
+  notifSound: 'default',
+  notifBanner: true,
+  autoStart: false,
+  minimizeToTray: true,
+  showOnline: true,
+}
+
+function loadSettings() {
+  try {
+    const s = localStorage.getItem('omni_settings')
+    return s ? { ...DEFAULT_SETTINGS, ...JSON.parse(s) } : DEFAULT_SETTINGS
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
+
 const useStore = create((set, get) => ({
   // Auth
   token: null,
@@ -132,11 +149,32 @@ const useStore = create((set, get) => ({
   },
   removeToast: (id) => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })),
 
+  // Notification banner queue
+  notifQueue: [],
+  pushNotif: (notif) => {
+    const id = Date.now() + Math.random()
+    set(s => ({ notifQueue: [...s.notifQueue, { id, ...notif }] }))
+  },
+  dismissNotif: (id) => set(s => ({ notifQueue: s.notifQueue.filter(n => n.id !== id) })),
+
   // Theme
   theme: 'violet',
   setTheme: (t) => {
     set({ theme: t })
     applyTheme(t)
+  },
+
+  // Settings
+  settings: loadSettings(),
+  updateSettings: (newSettings) => {
+    const merged = { ...get().settings, ...newSettings }
+    localStorage.setItem('omni_settings', JSON.stringify(merged))
+    set({ settings: merged })
+    if (window.electron) {
+      if (newSettings.minimizeToTray !== undefined) {
+        window.electron.setMinimizeToTray(newSettings.minimizeToTray)
+      }
+    }
   },
 
   // Stickers & custom emojis
@@ -146,8 +184,12 @@ const useStore = create((set, get) => ({
   setCustomEmojis: (emojis) => set({ customEmojis: emojis }),
 
   // View
-  view: 'chats', // 'chats' | 'servers' | 'profile' | 'shop' | 'admin' | 'creator'
+  view: 'chats', // 'chats' | 'servers' | 'profile' | 'shop' | 'admin' | 'creator' | 'settings'
   setView: (v) => set({ view: v }),
+
+  // User profile modal
+  viewingUserId: null,
+  setViewingUser: (id) => set({ viewingUserId: id }),
 }))
 
 const THEMES = {

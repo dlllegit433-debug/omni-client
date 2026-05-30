@@ -9,10 +9,14 @@ import ProfilePage from './ProfilePage'
 import ShopPage from './ShopPage'
 import AdminPage from './AdminPage'
 import CreatorPage from './CreatorPage'
+import SettingsPage from './SettingsPage'
+import ToolPage from './ToolPage'
+import UserProfileModal from '../components/UserProfileModal'
 import styles from './MainPage.module.css'
 
 export default function MainPage({ getWs }) {
-  const { view, activeConvId, activeServerId, setConversations, setServers, me } = useStore()
+  const { view, activeConvId, activeServerId, setConversations, setServers, me,
+    viewingUserId, setViewingUser } = useStore()
 
   useEffect(() => {
     loadConversations()
@@ -50,6 +54,8 @@ export default function MainPage({ getWs }) {
     if (view === 'shop') return <ShopPage />
     if (view === 'admin') return <AdminPage />
     if (view === 'creator') return <CreatorPage />
+    if (view === 'settings') return <SettingsPage />
+    if (view === 'tool') return <ToolPage />
     if (view === 'servers' && activeServerId) return <ServerView getWs={getWs} />
     if (view === 'chats' && activeConvId) return <ChatView getWs={getWs} onStickerPackAdded={loadMyStickers} />
     return <EmptyState view={view} />
@@ -64,6 +70,12 @@ export default function MainPage({ getWs }) {
           {renderMain()}
         </main>
       </div>
+      {viewingUserId && (
+        <UserProfileModal
+          userId={viewingUserId}
+          onClose={() => setViewingUser(null)}
+        />
+      )}
     </div>
   )
 }

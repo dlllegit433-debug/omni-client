@@ -90,6 +90,24 @@
 .iconBtn:hover { background: var(--bg4); color: var(--text); }
 .iconBtnActive { background: var(--bg3) !important; color: var(--accent) !important; }
 
+.toolBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #7c3aed, #db2777);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+  box-shadow: 0 2px 8px rgba(124,58,237,0.4);
+}
+.toolBtn:hover { opacity: 0.85; }
+
 .navTabs {
   display: flex;
   gap: 0;

@@ -15,8 +15,15 @@ export default function NewChatModal({ onClose }) {
   async function doSearch() {
     if (!search.trim()) return
     setLoading(true)
-    const res = await get('/api/users/search', { params: { q: search } })
-    if (res.ok) setResults(res.data.users || res.data || [])
+    const res = await get('/api/users/search', { params: { username: search, multi: '1' } })
+    if (res.ok) {
+      const data = res.data
+      if (Array.isArray(data)) setResults(data)
+      else if (data?.id) setResults([data])
+      else setResults([])
+    } else {
+      setResults([])
+    }
     setLoading(false)
   }
 

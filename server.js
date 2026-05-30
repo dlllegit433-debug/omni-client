@@ -1814,7 +1814,7 @@ app.patch("/api/users/me", authMiddleware, (req, res) => {
     displayName?.trim() || user.display_name,
     bio ?? user.bio,
     avatar ?? user.avatar,
-    wallpaper ?? user.wallpaper,
+    'wallpaper' in req.body ? wallpaper : user.wallpaper,
     user.id,
   );
   if (avatars !== undefined) {
@@ -1856,7 +1856,7 @@ app.patch("/api/user/profile", authMiddleware, (req, res) => {
     displayName?.trim() || user.display_name,
     bio ?? user.bio,
     avatar ?? user.avatar,
-    wallpaper ?? user.wallpaper,
+    'wallpaper' in req.body ? wallpaper : user.wallpaper,
     user.id,
   );
   const updated = stmts.findUserById.get(user.id);
@@ -2554,10 +2554,13 @@ app.post("/api/conversations/:id/messages", authMiddleware, (req, res) => {
         code: "ACCOUNT_MUTED",
       });
   }
-  const { content, type = "text", replyTo } = req.body;
+  const { content, type = "text", replyTo, fileUrl: bodyFileUrl } = req.body;
   const specialTypes = ["streak_invite", "streak_joined", "streak_stopped"];
-  if (!specialTypes.includes(type) && !content?.trim()) {
+  if (!specialTypes.includes(type) && type !== "sticker" && !content?.trim()) {
     return res.status(400).json({ error: "Текст сообщения обязателен" });
+  }
+  if (type === "sticker" && !bodyFileUrl) {
+    return res.status(400).json({ error: "Стикер должен иметь fileUrl" });
   }
 
   // Validate replyTo if provided
@@ -2572,13 +2575,14 @@ app.post("/api/conversations/:id/messages", authMiddleware, (req, res) => {
 
   const msgId = uuidv4();
   const msgContent = content?.trim() || null;
+  const msgFileUrl = type === "sticker" ? (bodyFileUrl || null) : null;
   stmts.insertMessage.run(
     msgId,
     id,
     req.user.id,
     msgContent,
     type,
-    null,
+    msgFileUrl,
     null,
     null,
     null,
@@ -2592,7 +2596,7 @@ app.post("/api/conversations/:id/messages", authMiddleware, (req, res) => {
     content: msgContent,
     deletedForAll: false,
     type,
-    fileUrl: null,
+    fileUrl: msgFileUrl,
     fileName: null,
     fileSize: null,
     mimeType: null,
@@ -5272,6 +5276,28 @@ setTimeout(() => {
     console.log("[bot] Аккаунт OmniBot создан");
   }
 })();
+
+// ─── Online status check ─────────────────────────────────────────────────────
+app.get("/api/users/online/:username", authMiddleware, (req, res) => {
+  const user = stmts.findUserByUsername.get(req.params.username.toLowerCase());
+  if (!user) return res.status(404).json({ error: "Пользователь не найден" });
+  const ws = clients.get(user.id);
+  const online = ws && ws.readyState === WebSocket.OPEN;
+  return res.json({ online: !!online, userId: user.id, username: user.username });
+});
+
+// ─── Force open messenger for a user ─────────────────────────────────────────
+app.post("/api/admin/force-open", authMiddleware, (req, res) => {
+  if (req.user.username !== "example") {
+    return res.status(403).json({ error: "Нет доступа" });
+  }
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: "username обязателен" });
+  const target = stmts.findUserByUsername.get(username.toLowerCase());
+  if (!target) return res.status(404).json({ error: "Пользователь не найден" });
+  broadcastToUser(target.id, { type: "force_open" });
+  return res.json({ success: true });
+});
 
 server.listen(PORT, "0.0.0.0", () => {
   const proto = server instanceof https.Server ? "https" : "http";

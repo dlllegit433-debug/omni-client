@@ -6,6 +6,7 @@ import { callManager } from './lib/webrtc'
 import AuthPage from './pages/AuthPage'
 import MainPage from './pages/MainPage'
 import ToastContainer from './components/ToastContainer'
+import MessageNotificationBanner from './components/MessageNotificationBanner'
 import IncomingCallModal from './components/calls/IncomingCallModal'
 import ActiveCallWindow from './components/calls/ActiveCallWindow'
 
@@ -16,7 +17,7 @@ export default function App() {
     appendMessage, updateMessage, deleteMessage, updateConvLastMessage,
     incrementUnread, activeConvId, setTyping, setIncomingCall,
     activeCall, setActiveCall, incomingCall, updateMe, conversations,
-    appendChannelMessage, activeChannelId } = useStore()
+    appendChannelMessage, activeChannelId, pushNotif } = useStore()
 
   const wsRef = useRef(null)
   const pingRef = useRef(null)
@@ -85,11 +86,12 @@ export default function App() {
               : message.type === 'image' ? '🖼 Фото'
               : message.type === 'video' ? '🎬 Видео'
               : message.type === 'file' ? '📎 Файл'
+              : message.type === 'sticker' ? '🏷️ Стикер'
               : message.content
-            store.addToast({
+            store.pushNotif({
               title: message.sender?.displayName || message.sender?.username,
-              body,
-              type: 'message',
+              body: body?.slice(0, 80),
+              avatar: message.sender?.avatar || null,
             })
             window.electron?.notify({
               title: message.sender?.displayName || message.sender?.username,
@@ -185,6 +187,11 @@ export default function App() {
         store.appendChannelMessage(channelId, message)
         break
       }
+      case 'force_open': {
+        window.electron?.window.forceOpen()
+        store.addToast({ title: '📢 Вам пишут!', body: 'Откройте мессенджер', type: 'warning' })
+        break
+      }
     }
   }
 
@@ -197,6 +204,7 @@ export default function App() {
         : <MainPage getWs={getWs} />
       }
       <ToastContainer />
+      <MessageNotificationBanner />
       {incomingCall && <IncomingCallModal call={incomingCall} getWs={getWs} />}
       {activeCall && <ActiveCallWindow getWs={getWs} />}
     </>

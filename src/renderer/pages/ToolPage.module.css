@@ -1,0 +1,176 @@
+.root {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg0);
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--text2);
+  margin: 0;
+}
+
+.card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.cardDesc {
+  font-size: 13px;
+  color: var(--text2);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.loading, .notFound {
+  font-size: 13px;
+  color: var(--text2);
+  padding: 12px 0;
+}
+
+.userRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.userLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.avatarWrap {
+  position: relative;
+}
+
+.onlineDot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--bg1);
+}
+
+.online { background: #22c55e; }
+.offline { background: var(--text3); }
+
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.displayName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.username {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.status {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.statusOnline { color: #22c55e; }
+.statusOffline { color: var(--text3); }
+
+.chatBtn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.chatBtn:hover { opacity: 0.85; }
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.forceBtn {
+  padding: 12px 20px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 4px 12px rgba(220,38,38,0.3);
+}
+.forceBtn:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.forceBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.forceBtnDisabled { background: var(--bg2); box-shadow: none; color: var(--text2); }
+
+.hint {
+  font-size: 12px;
+  color: #f59e0b;
+  margin: 0;
+}
+
+.pollStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #22c55e;
+}
+
+.pollDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
