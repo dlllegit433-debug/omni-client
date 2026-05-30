@@ -252,6 +252,70 @@ try { db.exec("ALTER TABLE users ADD COLUMN global_role TEXT NOT NULL DEFAULT 'u
 try { db.exec("ALTER TABLE users ADD COLUMN nickname_color TEXT"); } catch {}
 try { db.exec("ALTER TABLE users ADD COLUMN nickname_rainbow INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE users ADD COLUMN nickname_font TEXT"); } catch {}
+try { db.exec("ALTER TABLE users ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0"); } catch {}
+
+// ─── Sticker / Emoji / Catalog tables ────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sticker_packs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    description TEXT,
+    author_id TEXT NOT NULL REFERENCES users(id),
+    cover_url TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS stickers (
+    id TEXT PRIMARY KEY,
+    pack_id TEXT NOT NULL REFERENCES sticker_packs(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    file_url TEXT NOT NULL,
+    order_idx INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS custom_emojis (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    image_url TEXT NOT NULL,
+    author_id TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS user_sticker_packs (
+    user_id TEXT NOT NULL REFERENCES users(id),
+    pack_id TEXT NOT NULL REFERENCES sticker_packs(id),
+    PRIMARY KEY (user_id, pack_id)
+  );
+  CREATE TABLE IF NOT EXISTS catalog_themes (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    author_id TEXT NOT NULL REFERENCES users(id),
+    colors TEXT NOT NULL DEFAULT '{}',
+    is_approved INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS catalog_language_packs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    language_code TEXT NOT NULL,
+    author_id TEXT NOT NULL REFERENCES users(id),
+    strings TEXT NOT NULL DEFAULT '{}',
+    is_approved INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS catalog_session_tokens (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    expires_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS user_applied_theme (
+    user_id TEXT PRIMARY KEY REFERENCES users(id),
+    theme_id TEXT REFERENCES catalog_themes(id)
+  );
+  CREATE TABLE IF NOT EXISTS user_applied_language (
+    user_id TEXT PRIMARY KEY REFERENCES users(id),
+    lang_pack_id TEXT REFERENCES catalog_language_packs(id)
+  );
+`);
 
 // ─── Sneak Peek ──────────────────────────────────────────────────────────────
 db.exec(`
@@ -335,88 +399,6 @@ db.exec(`
     last_read_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (conversation_id, user_id)
   );
-`);
-
-// ─── Стикеры, Эмодзи, Каталог ───────────────────────────────────────────────
-
-try { db.exec("ALTER TABLE users ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0"); } catch {}
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS sticker_packs (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE,
-    description TEXT,
-    author_id TEXT NOT NULL REFERENCES users(id),
-    cover_url TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS stickers (
-    id TEXT PRIMARY KEY,
-    pack_id TEXT NOT NULL REFERENCES sticker_packs(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    image_url TEXT NOT NULL,
-    position INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS custom_emojis (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    image_url TEXT NOT NULL,
-    author_id TEXT NOT NULL REFERENCES users(id),
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS user_sticker_packs (
-    user_id TEXT NOT NULL REFERENCES users(id),
-    pack_id TEXT NOT NULL REFERENCES sticker_packs(id) ON DELETE CASCADE,
-    added_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (user_id, pack_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS catalog_themes (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE,
-    author_id TEXT NOT NULL REFERENCES users(id),
-    colors TEXT NOT NULL,
-    preview_colors TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS catalog_language_packs (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE,
-    lang_code TEXT NOT NULL,
-    author_id TEXT NOT NULL REFERENCES users(id),
-    translations TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS catalog_session_tokens (
-    token TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id),
-    expires_at TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS user_applied_theme (
-    user_id TEXT PRIMARY KEY REFERENCES users(id),
-    theme_id TEXT REFERENCES catalog_themes(id) ON DELETE SET NULL,
-    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS user_applied_language (
-    user_id TEXT PRIMARY KEY REFERENCES users(id),
-    lang_id TEXT REFERENCES catalog_language_packs(id) ON DELETE SET NULL,
-    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_stickers_pack ON stickers(pack_id, position);
-  CREATE INDEX IF NOT EXISTS idx_user_sticker_packs ON user_sticker_packs(user_id);
 `);
 
 // ─── Права доступа ──────────────────────────────────────────────────────────
@@ -671,64 +653,83 @@ const stmts = {
   // Admin
   setAdmin: db.prepare("UPDATE users SET is_admin = 1 WHERE username = 'admin'"),
   updateTheme: db.prepare("UPDATE users SET theme = ? WHERE id = ?"),
+};
 
-  // Sticker packs
+// ─── Sticker / Emoji / Catalog statements ────────────────────────────────────
+const stickerStmts = {
   insertStickerPack: db.prepare("INSERT INTO sticker_packs (id, name, slug, description, author_id, cover_url) VALUES (?, ?, ?, ?, ?, ?)"),
-  getStickerPackBySlug: db.prepare("SELECT sp.*, u.username as author_username, u.display_name as author_display_name FROM sticker_packs sp JOIN users u ON u.id = sp.author_id WHERE sp.slug = ?"),
-  getStickerPackById: db.prepare("SELECT sp.*, u.username as author_username, u.display_name as author_display_name FROM sticker_packs sp JOIN users u ON u.id = sp.author_id WHERE sp.id = ?"),
-  listStickerPacks: db.prepare("SELECT sp.*, u.username as author_username, u.display_name as author_display_name, (SELECT COUNT(*) FROM stickers WHERE pack_id = sp.id) as sticker_count FROM sticker_packs sp JOIN users u ON u.id = sp.author_id ORDER BY sp.created_at DESC"),
-  deleteStickerPack: db.prepare("DELETE FROM sticker_packs WHERE id = ? AND author_id = ?"),
+  getStickerPackBySlug: db.prepare("SELECT sp.*, u.username as author_username FROM sticker_packs sp LEFT JOIN users u ON u.id = sp.author_id WHERE sp.slug = ?"),
+  getStickerPackById: db.prepare("SELECT sp.*, u.username as author_username FROM sticker_packs sp LEFT JOIN users u ON u.id = sp.author_id WHERE sp.id = ?"),
+  getStickersForPack: db.prepare("SELECT * FROM stickers WHERE pack_id = ? ORDER BY order_idx"),
+  insertSticker: db.prepare("INSERT INTO stickers (id, pack_id, name, file_url, order_idx) VALUES (?, ?, ?, ?, ?)"),
+  deleteSticker: db.prepare("DELETE FROM stickers WHERE id = ? AND pack_id = ?"),
+  deleteStickerPack: db.prepare("DELETE FROM sticker_packs WHERE id = ?"),
   updateStickerPackCover: db.prepare("UPDATE sticker_packs SET cover_url = ? WHERE id = ?"),
-
-  // Stickers
-  insertSticker: db.prepare("INSERT INTO stickers (id, pack_id, name, image_url, position) VALUES (?, ?, ?, ?, ?)"),
-  getStickersForPack: db.prepare("SELECT * FROM stickers WHERE pack_id = ? ORDER BY position ASC"),
-  deleteSticker: db.prepare("DELETE FROM stickers WHERE id = ?"),
-  getStickerMaxPosition: db.prepare("SELECT COALESCE(MAX(position), -1) as max_pos FROM stickers WHERE pack_id = ?"),
-
-  // Custom emojis
-  insertCustomEmoji: db.prepare("INSERT INTO custom_emojis (id, name, image_url, author_id) VALUES (?, ?, ?, ?)"),
-  listCustomEmojis: db.prepare("SELECT ce.*, u.username as author_username FROM custom_emojis ce JOIN users u ON u.id = ce.author_id ORDER BY ce.created_at DESC"),
-  getCustomEmojiByName: db.prepare("SELECT * FROM custom_emojis WHERE name = ?"),
-  deleteCustomEmoji: db.prepare("DELETE FROM custom_emojis WHERE id = ? AND author_id = ?"),
-
-  // User sticker packs
   addUserStickerPack: db.prepare("INSERT OR IGNORE INTO user_sticker_packs (user_id, pack_id) VALUES (?, ?)"),
   removeUserStickerPack: db.prepare("DELETE FROM user_sticker_packs WHERE user_id = ? AND pack_id = ?"),
-  getUserStickerPacks: db.prepare(`
-    SELECT sp.*, u.username as author_username, u.display_name as author_display_name,
-           (SELECT COUNT(*) FROM stickers WHERE pack_id = sp.id) as sticker_count
-    FROM user_sticker_packs usp
-    JOIN sticker_packs sp ON sp.id = usp.pack_id
-    JOIN users u ON u.id = sp.author_id
-    WHERE usp.user_id = ?
-    ORDER BY usp.added_at DESC
-  `),
-  hasUserStickerPack: db.prepare("SELECT 1 FROM user_sticker_packs WHERE user_id = ? AND pack_id = ?"),
+  getUserStickerPacks: db.prepare("SELECT sp.*, u.username as author_username FROM user_sticker_packs usp JOIN sticker_packs sp ON sp.id = usp.pack_id LEFT JOIN users u ON u.id = sp.author_id WHERE usp.user_id = ?"),
+  getMyAuthoredPacks: db.prepare("SELECT sp.*, u.username as author_username FROM sticker_packs sp LEFT JOIN users u ON u.id = sp.author_id WHERE sp.author_id = ?"),
+  getAllStickerPacks: db.prepare("SELECT sp.*, u.username as author_username FROM sticker_packs sp LEFT JOIN users u ON u.id = sp.author_id ORDER BY sp.created_at DESC"),
 
-  // Catalog themes
-  insertCatalogTheme: db.prepare("INSERT INTO catalog_themes (id, name, slug, author_id, colors, preview_colors) VALUES (?, ?, ?, ?, ?, ?)"),
-  listCatalogThemes: db.prepare("SELECT ct.*, u.username as author_username FROM catalog_themes ct JOIN users u ON u.id = ct.author_id ORDER BY ct.created_at DESC"),
+  insertCustomEmoji: db.prepare("INSERT INTO custom_emojis (id, name, image_url, author_id) VALUES (?, ?, ?, ?)"),
+  getCustomEmojiByName: db.prepare("SELECT * FROM custom_emojis WHERE name = ?"),
+  getCustomEmojiById: db.prepare("SELECT * FROM custom_emojis WHERE id = ?"),
+  getAllCustomEmojis: db.prepare("SELECT ce.*, u.username as author_username FROM custom_emojis ce LEFT JOIN users u ON u.id = ce.author_id ORDER BY ce.created_at DESC"),
+  deleteCustomEmoji: db.prepare("DELETE FROM custom_emojis WHERE id = ?"),
+
+  insertCatalogTheme: db.prepare("INSERT INTO catalog_themes (id, name, slug, author_id, colors) VALUES (?, ?, ?, ?, ?)"),
+  getAllCatalogThemes: db.prepare("SELECT ct.*, u.username as author_username FROM catalog_themes ct LEFT JOIN users u ON u.id = ct.author_id WHERE ct.is_approved = 1 ORDER BY ct.created_at DESC"),
   getCatalogThemeById: db.prepare("SELECT * FROM catalog_themes WHERE id = ?"),
-  deleteCatalogTheme: db.prepare("DELETE FROM catalog_themes WHERE id = ? AND author_id = ?"),
+  deleteCatalogTheme: db.prepare("DELETE FROM catalog_themes WHERE id = ?"),
 
-  // Catalog language packs
-  insertCatalogLang: db.prepare("INSERT INTO catalog_language_packs (id, name, slug, lang_code, author_id, translations) VALUES (?, ?, ?, ?, ?, ?)"),
-  listCatalogLangs: db.prepare("SELECT cl.*, u.username as author_username FROM catalog_language_packs cl JOIN users u ON u.id = cl.author_id ORDER BY cl.created_at DESC"),
-  getCatalogLangById: db.prepare("SELECT * FROM catalog_language_packs WHERE id = ?"),
-  deleteCatalogLang: db.prepare("DELETE FROM catalog_language_packs WHERE id = ? AND author_id = ?"),
+  insertLangPack: db.prepare("INSERT INTO catalog_language_packs (id, name, language_code, author_id, strings) VALUES (?, ?, ?, ?, ?)"),
+  getAllLangPacks: db.prepare("SELECT clp.*, u.username as author_username FROM catalog_language_packs clp LEFT JOIN users u ON u.id = clp.author_id WHERE clp.is_approved = 1 ORDER BY clp.created_at DESC"),
+  deleteLangPack: db.prepare("DELETE FROM catalog_language_packs WHERE id = ?"),
 
-  // User applied theme/language
-  upsertUserTheme: db.prepare("INSERT INTO user_applied_theme (user_id, theme_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET theme_id = excluded.theme_id, applied_at = datetime('now')"),
-  getUserTheme: db.prepare("SELECT ct.* FROM user_applied_theme uat JOIN catalog_themes ct ON ct.id = uat.theme_id WHERE uat.user_id = ?"),
-  upsertUserLang: db.prepare("INSERT INTO user_applied_language (user_id, lang_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET lang_id = excluded.lang_id, applied_at = datetime('now')"),
-  getUserLang: db.prepare("SELECT cl.* FROM user_applied_language ual JOIN catalog_language_packs cl ON cl.id = ual.lang_id WHERE ual.user_id = ?"),
-
-  // Catalog session tokens
-  insertCatalogToken: db.prepare("INSERT INTO catalog_session_tokens (token, user_id, expires_at) VALUES (?, ?, ?)"),
+  insertCatalogToken: db.prepare("INSERT INTO catalog_session_tokens (token, user_id, expires_at) VALUES (?, ?, datetime('now', '+1 hour'))"),
   getCatalogToken: db.prepare("SELECT * FROM catalog_session_tokens WHERE token = ? AND expires_at > datetime('now')"),
-  cleanCatalogTokens: db.prepare("DELETE FROM catalog_session_tokens WHERE expires_at <= datetime('now')"),
+  deleteCatalogToken: db.prepare("DELETE FROM catalog_session_tokens WHERE token = ?"),
+  cleanupCatalogTokens: db.prepare("DELETE FROM catalog_session_tokens WHERE expires_at <= datetime('now')"),
+
+  setAppliedTheme: db.prepare("INSERT OR REPLACE INTO user_applied_theme (user_id, theme_id) VALUES (?, ?)"),
+  getAppliedTheme: db.prepare("SELECT uat.*, ct.name as theme_name, ct.colors FROM user_applied_theme uat LEFT JOIN catalog_themes ct ON ct.id = uat.theme_id WHERE uat.user_id = ?"),
+  setAppliedLang: db.prepare("INSERT OR REPLACE INTO user_applied_language (user_id, lang_pack_id) VALUES (?, ?)"),
+  getAppliedLang: db.prepare("SELECT ual.*, clp.name as lang_name, clp.language_code, clp.strings FROM user_applied_language ual LEFT JOIN catalog_language_packs clp ON clp.id = ual.lang_pack_id WHERE ual.user_id = ?"),
 };
+
+// ─── Sticker / Emoji upload dirs and helpers ─────────────────────────────────
+const STICKER_DIR = path.join(__dirname, "uploads", "stickers");
+const EMOJI_DIR   = path.join(__dirname, "uploads", "emojis");
+if (!fs.existsSync(STICKER_DIR)) fs.mkdirSync(STICKER_DIR, { recursive: true });
+if (!fs.existsSync(EMOJI_DIR))   fs.mkdirSync(EMOJI_DIR,   { recursive: true });
+
+const stickerUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_r, _f, cb) => cb(null, STICKER_DIR),
+    filename: (_r, f, cb) => cb(null, `${uuidv4()}${path.extname(f.originalname)}`),
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
+const emojiUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_r, _f, cb) => cb(null, EMOJI_DIR),
+    filename: (_r, f, cb) => cb(null, `${uuidv4()}${path.extname(f.originalname)}`),
+  }),
+  limits: { fileSize: 512 * 1024 },
+});
+
+function formatStickerPack(pack, stickers) {
+  return {
+    id: pack.id,
+    name: pack.name,
+    slug: pack.slug,
+    description: pack.description || null,
+    authorUsername: pack.author_username || null,
+    coverUrl: pack.cover_url || null,
+    createdAt: pack.created_at,
+    stickers: (stickers || []).map(s => ({ id: s.id, name: s.name, fileUrl: s.file_url, orderIdx: s.order_idx })),
+  };
+}
 
 // ─── Format functions ────────────────────────────────────────────────────────
 
@@ -999,21 +1000,6 @@ function verifyYuMoneyNotification(params) {
 // ─── Инициализация пользователей ─────────────────────────────────────────────
 
 ;(async () => {
-  // Init @CreatorBot
-  try {
-    const botExisting = db.prepare("SELECT id FROM users WHERE username = 'creatorbot'").get();
-    if (!botExisting) {
-      const botHash = await bcrypt.hash('CreatorBot@bot99999', 10);
-      const botId = uuidv4();
-      db.prepare("INSERT INTO users (id, username, password_hash, display_name, is_admin, global_role, is_bot) VALUES (?, ?, ?, ?, 0, 'bot', 1)").run(botId, 'creatorbot', botHash, '🎨 CreatorBot');
-      console.log(`[init] Создан бот @creatorbot`);
-    } else {
-      try { db.prepare("UPDATE users SET is_bot = 1, display_name = '🎨 CreatorBot' WHERE username = 'creatorbot'").run(); } catch {}
-    }
-  } catch (e) {
-    console.error('[init] Ошибка при создании @creatorbot:', e.message);
-  }
-
   const INIT_USERS = [
     { username: 'omni',    displayName: 'Omni',    password: 'Omni@12345',    role: 'creator'  },
     { username: 'qwerty',  displayName: 'qwerty',  password: 'Qwerty@12345',  role: 'owner'    },
@@ -1168,6 +1154,23 @@ function verifyYuMoneyNotification(params) {
     if (r.changes > 0) promoCount++;
   }
   if (promoCount > 0) console.log(`[init] Добавлено ${promoCount} новых промокодов`);
+})();
+
+// ─── @creatorbot init ────────────────────────────────────────────────────────
+(function tryInitCreatorBot() {
+  const existing = db.prepare("SELECT id FROM users WHERE username = 'creatorbot'").get();
+  if (!existing) {
+    const bcryptLocal = require('bcrypt');
+    const botId = uuidv4();
+    const pwHash = require('crypto').randomBytes(32).toString('hex');
+    try {
+      db.prepare("INSERT INTO users (id, username, password_hash, display_name, is_bot) VALUES (?, ?, ?, ?, 1)")
+        .run(botId, 'creatorbot', pwHash, '🎨 CreatorBot');
+      console.log('[init] Создан бот @creatorbot');
+    } catch (e) {
+      console.log('[init] @creatorbot уже существует или ошибка:', e.message);
+    }
+  }
 })();
 
 // ─── Express ─────────────────────────────────────────────────────────────────
@@ -4026,286 +4029,6 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log("");
 });
 
-// ─── Стикеры и Эмодзи — API ──────────────────────────────────────────────────
-
-const stickerStorage = multer.diskStorage({
-  destination: path.join(UPLOADS_DIR, 'stickers'),
-  filename: (_req, file, cb) => {
-    if (!fs.existsSync(path.join(UPLOADS_DIR, 'stickers'))) {
-      fs.mkdirSync(path.join(UPLOADS_DIR, 'stickers'), { recursive: true });
-    }
-    const ext = path.extname(file.originalname);
-    cb(null, `${uuidv4()}${ext}`);
-  },
-});
-const stickerUpload = multer({ storage: stickerStorage, limits: { fileSize: 10 * 1024 * 1024 } });
-
-app.use('/uploads/stickers', express.static(path.join(UPLOADS_DIR, 'stickers')));
-
-function formatStickerPack(row, stickers = null) {
-  return {
-    id: row.id,
-    name: row.name,
-    slug: row.slug,
-    description: row.description ?? null,
-    authorId: row.author_id,
-    authorUsername: row.author_username,
-    authorDisplayName: row.author_display_name,
-    coverUrl: row.cover_url ?? null,
-    stickerCount: row.sticker_count ?? 0,
-    createdAt: row.created_at + 'Z',
-    stickers: stickers ? stickers.map(s => ({
-      id: s.id, packId: s.pack_id, name: s.name,
-      imageUrl: s.image_url, position: s.position,
-    })) : undefined,
-    link: `Om.org/${row.slug}`,
-  };
-}
-
-// Получить публичный пак по slug (без авторизации)
-app.get('/api/sticker-packs/by-slug/:slug', (req, res) => {
-  const pack = stmts.getStickerPackBySlug.get(req.params.slug);
-  if (!pack) return res.status(404).json({ error: 'Пак не найден' });
-  const stickers = stmts.getStickersForPack.all(pack.id);
-  res.json({ pack: formatStickerPack(pack, stickers) });
-});
-
-// Список всех паков
-app.get('/api/sticker-packs', authMiddleware, (req, res) => {
-  const packs = stmts.listStickerPacks.all();
-  res.json({ packs: packs.map(p => formatStickerPack(p)) });
-});
-
-// Создать пак стикеров
-app.post('/api/sticker-packs', authMiddleware, (req, res) => {
-  const { name, slug, description } = req.body;
-  if (!name?.trim() || !slug?.trim()) return res.status(400).json({ error: 'name и slug обязательны' });
-  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-  if (cleanSlug.length < 2) return res.status(400).json({ error: 'Slug слишком короткий' });
-  const existing = stmts.getStickerPackBySlug.get(cleanSlug);
-  if (existing) return res.status(409).json({ error: 'Такой slug уже занят' });
-  const id = uuidv4();
-  stmts.insertStickerPack.run(id, name.trim(), cleanSlug, description?.trim() || null, req.user.id, null);
-  stmts.addUserStickerPack.run(req.user.id, id);
-  const pack = stmts.getStickerPackById.get(id);
-  res.json({ pack: formatStickerPack(pack, []) });
-});
-
-// Удалить пак
-app.delete('/api/sticker-packs/:packId', authMiddleware, (req, res) => {
-  const pack = stmts.getStickerPackById.get(req.params.packId);
-  if (!pack) return res.status(404).json({ error: 'Пак не найден' });
-  if (pack.author_id !== req.user.id && !req.user.is_admin) return res.status(403).json({ error: 'Нет прав' });
-  stmts.deleteStickerPack.run(req.params.packId, req.user.id);
-  res.json({ ok: true });
-});
-
-// Добавить стикер в пак
-app.post('/api/sticker-packs/:packId/stickers', authMiddleware, stickerUpload.single('image'), (req, res) => {
-  const pack = stmts.getStickerPackById.get(req.params.packId);
-  if (!pack) return res.status(404).json({ error: 'Пак не найден' });
-  if (pack.author_id !== req.user.id) return res.status(403).json({ error: 'Нет прав' });
-  if (!req.file) return res.status(400).json({ error: 'Файл обязателен' });
-  const name = req.body.name?.trim() || 'Стикер';
-  const maxPos = stmts.getStickerMaxPosition.get(req.params.packId);
-  const pos = (maxPos?.max_pos ?? -1) + 1;
-  const imageUrl = `/uploads/stickers/${req.file.filename}`;
-  const id = uuidv4();
-  stmts.insertSticker.run(id, req.params.packId, name, imageUrl, pos);
-  // Обновить обложку пака если это первый стикер
-  if (pos === 0) stmts.updateStickerPackCover.run(imageUrl, req.params.packId);
-  res.json({ sticker: { id, packId: req.params.packId, name, imageUrl, position: pos } });
-});
-
-// Удалить стикер
-app.delete('/api/sticker-packs/:packId/stickers/:stickerId', authMiddleware, (req, res) => {
-  const pack = stmts.getStickerPackById.get(req.params.packId);
-  if (!pack) return res.status(404).json({ error: 'Пак не найден' });
-  if (pack.author_id !== req.user.id && !req.user.is_admin) return res.status(403).json({ error: 'Нет прав' });
-  stmts.deleteSticker.run(req.params.stickerId);
-  res.json({ ok: true });
-});
-
-// Добавить пак себе (пользователь)
-app.post('/api/sticker-packs/:packId/add', authMiddleware, (req, res) => {
-  const pack = stmts.getStickerPackById.get(req.params.packId);
-  if (!pack) return res.status(404).json({ error: 'Пак не найден' });
-  stmts.addUserStickerPack.run(req.user.id, req.params.packId);
-  res.json({ ok: true });
-});
-
-// Убрать пак
-app.delete('/api/sticker-packs/:packId/add', authMiddleware, (req, res) => {
-  stmts.removeUserStickerPack.run(req.user.id, req.params.packId);
-  res.json({ ok: true });
-});
-
-// Мои пакетики стикеров
-app.get('/api/my-sticker-packs', authMiddleware, (req, res) => {
-  const packs = stmts.getUserStickerPacks.all(req.user.id);
-  const result = packs.map(p => {
-    const stickers = stmts.getStickersForPack.all(p.id);
-    return formatStickerPack(p, stickers);
-  });
-  res.json({ packs: result });
-});
-
-// Стикеры конкретного пака
-app.get('/api/sticker-packs/:packId/stickers', authMiddleware, (req, res) => {
-  const pack = stmts.getStickerPackById.get(req.params.packId);
-  if (!pack) return res.status(404).json({ error: 'Пак не найден' });
-  const stickers = stmts.getStickersForPack.all(pack.id);
-  res.json({ pack: formatStickerPack(pack, stickers) });
-});
-
-// ─── Кастомные эмодзи ─────────────────────────────────────────────────────────
-
-const emojiStorage = multer.diskStorage({
-  destination: path.join(UPLOADS_DIR, 'emojis'),
-  filename: (_req, file, cb) => {
-    if (!fs.existsSync(path.join(UPLOADS_DIR, 'emojis'))) {
-      fs.mkdirSync(path.join(UPLOADS_DIR, 'emojis'), { recursive: true });
-    }
-    const ext = path.extname(file.originalname);
-    cb(null, `${uuidv4()}${ext}`);
-  },
-});
-const emojiUpload = multer({ storage: emojiStorage, limits: { fileSize: 2 * 1024 * 1024 } });
-
-app.use('/uploads/emojis', express.static(path.join(UPLOADS_DIR, 'emojis')));
-
-app.get('/api/custom-emojis', authMiddleware, (_req, res) => {
-  const emojis = stmts.listCustomEmojis.all();
-  res.json({ emojis: emojis.map(e => ({ id: e.id, name: e.name, imageUrl: e.image_url, authorUsername: e.author_username, createdAt: e.created_at + 'Z' })) });
-});
-
-app.post('/api/custom-emojis', authMiddleware, emojiUpload.single('image'), (req, res) => {
-  const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'name обязателен' });
-  const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
-  if (cleanName.length < 2) return res.status(400).json({ error: 'Имя слишком короткое' });
-  if (!req.file) return res.status(400).json({ error: 'Файл обязателен' });
-  const existing = stmts.getCustomEmojiByName.get(cleanName);
-  if (existing) return res.status(409).json({ error: 'Такой эмодзи уже существует' });
-  const id = uuidv4();
-  const imageUrl = `/uploads/emojis/${req.file.filename}`;
-  stmts.insertCustomEmoji.run(id, cleanName, imageUrl, req.user.id);
-  res.json({ emoji: { id, name: cleanName, imageUrl, authorUsername: req.user.username } });
-});
-
-app.delete('/api/custom-emojis/:id', authMiddleware, (req, res) => {
-  stmts.deleteCustomEmoji.run(req.params.id, req.user.id);
-  res.json({ ok: true });
-});
-
-// ─── Каталог: Темы ────────────────────────────────────────────────────────────
-
-app.get('/api/catalog/themes', authMiddleware, (_req, res) => {
-  const themes = stmts.listCatalogThemes.all();
-  res.json({ themes: themes.map(t => ({
-    id: t.id, name: t.name, slug: t.slug,
-    colors: JSON.parse(t.colors), previewColors: t.preview_colors ? JSON.parse(t.preview_colors) : null,
-    authorUsername: t.author_username, createdAt: t.created_at + 'Z',
-  })) });
-});
-
-app.post('/api/catalog/themes', authMiddleware, (req, res) => {
-  const { name, slug, colors, previewColors } = req.body;
-  if (!name?.trim() || !slug?.trim() || !colors) return res.status(400).json({ error: 'Обязательные поля: name, slug, colors' });
-  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-  if (db.prepare("SELECT 1 FROM catalog_themes WHERE slug = ?").get(cleanSlug)) return res.status(409).json({ error: 'Slug занят' });
-  const id = uuidv4();
-  stmts.insertCatalogTheme.run(id, name.trim(), cleanSlug, req.user.id, JSON.stringify(colors), previewColors ? JSON.stringify(previewColors) : null);
-  res.json({ theme: { id, name: name.trim(), slug: cleanSlug, colors } });
-});
-
-app.delete('/api/catalog/themes/:id', authMiddleware, (req, res) => {
-  stmts.deleteCatalogTheme.run(req.params.id, req.user.id);
-  res.json({ ok: true });
-});
-
-app.post('/api/catalog/themes/:id/apply', authMiddleware, (req, res) => {
-  const theme = stmts.getCatalogThemeById.get(req.params.id);
-  if (!theme) return res.status(404).json({ error: 'Тема не найдена' });
-  const premium = stmts.getPremium.get(req.user.id);
-  const isPremium = req.user.is_admin || (premium && new Date(premium.expires_at) > new Date());
-  if (!isPremium) return res.status(403).json({ error: 'Только для Premium', code: 'PREMIUM_REQUIRED' });
-  stmts.upsertUserTheme.run(req.user.id, req.params.id);
-  res.json({ ok: true, colors: JSON.parse(theme.colors) });
-});
-
-app.get('/api/catalog/my-theme', authMiddleware, (req, res) => {
-  const theme = stmts.getUserTheme.get(req.user.id);
-  if (!theme) return res.json({ theme: null });
-  res.json({ theme: { id: theme.id, name: theme.name, colors: JSON.parse(theme.colors) } });
-});
-
-// ─── Каталог: Языки ──────────────────────────────────────────────────────────
-
-app.get('/api/catalog/languages', authMiddleware, (_req, res) => {
-  const langs = stmts.listCatalogLangs.all();
-  res.json({ langs: langs.map(l => ({
-    id: l.id, name: l.name, slug: l.slug, langCode: l.lang_code,
-    authorUsername: l.author_username, createdAt: l.created_at + 'Z',
-  })) });
-});
-
-app.post('/api/catalog/languages', authMiddleware, (req, res) => {
-  const { name, slug, langCode, translations } = req.body;
-  if (!name?.trim() || !slug?.trim() || !langCode?.trim() || !translations) return res.status(400).json({ error: 'Обязательные поля: name, slug, langCode, translations' });
-  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-  if (db.prepare("SELECT 1 FROM catalog_language_packs WHERE slug = ?").get(cleanSlug)) return res.status(409).json({ error: 'Slug занят' });
-  const id = uuidv4();
-  stmts.insertCatalogLang.run(id, name.trim(), cleanSlug, langCode.trim(), req.user.id, JSON.stringify(translations));
-  res.json({ lang: { id, name: name.trim(), slug: cleanSlug, langCode: langCode.trim() } });
-});
-
-app.delete('/api/catalog/languages/:id', authMiddleware, (req, res) => {
-  stmts.deleteCatalogLang.run(req.params.id, req.user.id);
-  res.json({ ok: true });
-});
-
-app.get('/api/catalog/languages/:id/data', authMiddleware, (req, res) => {
-  const lang = stmts.getCatalogLangById.get(req.params.id);
-  if (!lang) return res.status(404).json({ error: 'Языковой пак не найден' });
-  res.json({ lang: { id: lang.id, name: lang.name, langCode: lang.lang_code, translations: JSON.parse(lang.translations) } });
-});
-
-app.post('/api/catalog/languages/:id/apply', authMiddleware, (req, res) => {
-  const lang = stmts.getCatalogLangById.get(req.params.id);
-  if (!lang) return res.status(404).json({ error: 'Языковой пак не найден' });
-  stmts.upsertUserLang.run(req.user.id, req.params.id);
-  res.json({ ok: true, translations: JSON.parse(lang.translations) });
-});
-
-app.get('/api/catalog/my-language', authMiddleware, (req, res) => {
-  const lang = stmts.getUserLang.get(req.user.id);
-  if (!lang) return res.json({ lang: null });
-  res.json({ lang: { id: lang.id, name: lang.name, langCode: lang.lang_code, translations: JSON.parse(lang.translations) } });
-});
-
-// ─── Каталог: Сессионная ссылка ───────────────────────────────────────────────
-
-app.post('/api/catalog/session-link', authMiddleware, (req, res) => {
-  stmts.cleanCatalogTokens.run();
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  stmts.insertCatalogToken.run(token, req.user.id, expiresAt);
-  res.json({ token, url: `/?catalog_token=${token}` });
-});
-
-// Блокировка DM к @creatorbot
-app.post('/api/conversations', authMiddleware, (req, res, next) => {
-  const { userId } = req.body;
-  if (userId) {
-    const targetUser = stmts.findUserById.get(userId);
-    if (targetUser?.is_bot === 1) {
-      return res.status(403).json({ error: 'Этот аккаунт — бот. Написать ему нельзя.' });
-    }
-  }
-  next();
-});
-
 // ─── Sneak Peek Admin Panel (Port 1488) ─────────────────────────────────────
 
 const sneakApp = express();
@@ -4769,549 +4492,325 @@ adminCreatorServer.listen(ADMIN_CREATOR_PORT, "0.0.0.0", () => {
   console.log(`[admin_creator] Панель создания adminов запущена на порту ${ADMIN_CREATOR_PORT}`);
 });
 
-// ─── Порт 228: Каталог (стикеры, эмодзи, темы, языки) ────────────────────────
+// ─── Sticker Packs API ───────────────────────────────────────────────────────
 
-const CATALOG_PORT = 228;
-const catalogApp = express();
-catalogApp.use(cors({ origin: "*" }));
-catalogApp.use(express.json());
-catalogApp.use(express.urlencoded({ extended: true }));
-catalogApp.use("/uploads", express.static(UPLOADS_DIR));
-
-function catalogAuth(req, res, next) {
-  const t = req.query.token || req.headers['x-catalog-token'] || req.body?.token;
-  if (!t) return res.status(401).json({ error: "Требуется токен" });
-  stmts.cleanCatalogTokens.run();
-  const row = stmts.getCatalogToken.get(t);
-  if (!row) return res.status(401).json({ error: "Токен недействителен или истёк" });
-  const user = stmts.findUserById.get(row.user_id);
-  if (!user) return res.status(401).json({ error: "Пользователь не найден" });
-  req.user = user;
-  req.catalogToken = t;
-  next();
-}
-
-catalogApp.get('/api/catalog/me', catalogAuth, (req, res) => {
-  const premium = stmts.getPremium.get(req.user.id);
-  const isPremium = req.user.is_admin || (premium && new Date(premium.expires_at) > new Date());
-  res.json({ user: formatUser(req.user), isPremium });
+// GET /api/sticker-packs — все паки (каталог)
+app.get("/api/sticker-packs", authMiddleware, (req, res) => {
+  const packs = stickerStmts.getAllStickerPacks.all();
+  res.json({ packs: packs.map(p => formatStickerPack(p, stickerStmts.getStickersForPack.all(p.id))) });
 });
 
-catalogApp.get('/api/catalog/sticker-packs', catalogAuth, (_req, res) => {
-  const packs = stmts.listStickerPacks.all();
-  res.json({ packs: packs.map(p => formatStickerPack(p)) });
+// GET /api/my-sticker-packs — паки пользователя (добавленные)
+app.get("/api/my-sticker-packs", authMiddleware, (req, res) => {
+  const packs = stickerStmts.getUserStickerPacks.all(req.user.id);
+  res.json({ packs: packs.map(p => formatStickerPack(p, stickerStmts.getStickersForPack.all(p.id))) });
 });
 
-catalogApp.get('/api/catalog/sticker-packs/:packId', catalogAuth, (req, res) => {
-  const pack = stmts.getStickerPackById.get(req.params.packId);
-  if (!pack) return res.status(404).json({ error: 'Пак не найден' });
-  const stickers = stmts.getStickersForPack.all(pack.id);
+// GET /api/my-authored-packs — паки созданные пользователем
+app.get("/api/my-authored-packs", authMiddleware, (req, res) => {
+  const packs = stickerStmts.getMyAuthoredPacks.all(req.user.id);
+  res.json({ packs: packs.map(p => formatStickerPack(p, stickerStmts.getStickersForPack.all(p.id))) });
+});
+
+// GET /api/sticker-packs/:slug — один пак по slug
+app.get("/api/sticker-packs/:slug", (req, res) => {
+  const pack = stickerStmts.getStickerPackBySlug.get(req.params.slug);
+  if (!pack) return res.status(404).json({ error: "Пак не найден" });
+  const stickers = stickerStmts.getStickersForPack.all(pack.id);
   res.json({ pack: formatStickerPack(pack, stickers) });
 });
 
-catalogApp.post('/api/catalog/sticker-packs/:packId/add', catalogAuth, (req, res) => {
-  stmts.addUserStickerPack.run(req.user.id, req.params.packId);
+// POST /api/sticker-packs — создать пак
+app.post("/api/sticker-packs", authMiddleware, (req, res) => {
+  const { name, slug, description } = req.body;
+  if (!name?.trim() || !slug?.trim()) return res.status(400).json({ error: "name и slug обязательны" });
+  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+  if (cleanSlug.length < 2) return res.status(400).json({ error: "Slug слишком короткий" });
+  if (stickerStmts.getStickerPackBySlug.get(cleanSlug)) return res.status(409).json({ error: "Slug уже занят" });
+  const id = uuidv4();
+  stickerStmts.insertStickerPack.run(id, name.trim(), cleanSlug, description?.trim() || null, req.user.id, null);
+  stickerStmts.addUserStickerPack.run(req.user.id, id);
+  const pack = stickerStmts.getStickerPackById.get(id);
+  res.json({ pack: formatStickerPack(pack, []) });
+});
+
+// DELETE /api/sticker-packs/:id — удалить пак
+app.delete("/api/sticker-packs/:id", authMiddleware, (req, res) => {
+  const pack = stickerStmts.getStickerPackById.get(req.params.id);
+  if (!pack) return res.status(404).json({ error: "Пак не найден" });
+  if (pack.author_id !== req.user.id && !req.user.is_admin) return res.status(403).json({ error: "Нет прав" });
+  stickerStmts.deleteStickerPack.run(req.params.id);
   res.json({ ok: true });
 });
 
-catalogApp.get('/api/catalog/emojis', catalogAuth, (_req, res) => {
-  const emojis = stmts.listCustomEmojis.all();
+// POST /api/sticker-packs/:id/add — добавить себе пак
+app.post("/api/sticker-packs/:id/add", authMiddleware, (req, res) => {
+  const pack = stickerStmts.getStickerPackById.get(req.params.id);
+  if (!pack) return res.status(404).json({ error: "Пак не найден" });
+  stickerStmts.addUserStickerPack.run(req.user.id, req.params.id);
+  res.json({ ok: true });
+});
+
+// POST /api/sticker-packs/:id/remove — убрать пак
+app.post("/api/sticker-packs/:id/remove", authMiddleware, (req, res) => {
+  stickerStmts.removeUserStickerPack.run(req.user.id, req.params.id);
+  res.json({ ok: true });
+});
+
+// POST /api/sticker-packs/:id/stickers — добавить стикер
+app.post("/api/sticker-packs/:id/stickers", authMiddleware, stickerUpload.single("file"), (req, res) => {
+  const pack = stickerStmts.getStickerPackById.get(req.params.id);
+  if (!pack) return res.status(404).json({ error: "Пак не найден" });
+  if (pack.author_id !== req.user.id && !req.user.is_admin) return res.status(403).json({ error: "Нет прав" });
+  if (!req.file) return res.status(400).json({ error: "Файл обязателен" });
+  const name = req.body.name?.trim() || req.file.originalname;
+  const existingCount = stickerStmts.getStickersForPack.all(req.params.id).length;
+  const id = uuidv4();
+  const fileUrl = `/uploads/stickers/${req.file.filename}`;
+  stickerStmts.insertSticker.run(id, req.params.id, name, fileUrl, existingCount);
+  if (!pack.cover_url) stickerStmts.updateStickerPackCover.run(fileUrl, req.params.id);
+  res.json({ sticker: { id, name, fileUrl, orderIdx: existingCount } });
+});
+
+// DELETE /api/sticker-packs/:id/stickers/:stickerId — удалить стикер
+app.delete("/api/sticker-packs/:id/stickers/:stickerId", authMiddleware, (req, res) => {
+  const pack = stickerStmts.getStickerPackById.get(req.params.id);
+  if (!pack) return res.status(404).json({ error: "Пак не найден" });
+  if (pack.author_id !== req.user.id && !req.user.is_admin) return res.status(403).json({ error: "Нет прав" });
+  stickerStmts.deleteSticker.run(req.params.stickerId, req.params.id);
+  res.json({ ok: true });
+});
+
+// ─── Custom Emojis API ───────────────────────────────────────────────────────
+
+// GET /api/custom-emojis
+app.get("/api/custom-emojis", authMiddleware, (req, res) => {
+  const emojis = stickerStmts.getAllCustomEmojis.all();
   res.json({ emojis: emojis.map(e => ({ id: e.id, name: e.name, imageUrl: e.image_url, authorUsername: e.author_username })) });
 });
 
-catalogApp.get('/api/catalog/themes', catalogAuth, (_req, res) => {
-  const themes = stmts.listCatalogThemes.all();
-  res.json({ themes: themes.map(t => ({ id: t.id, name: t.name, slug: t.slug, colors: JSON.parse(t.colors), previewColors: t.preview_colors ? JSON.parse(t.preview_colors) : null, authorUsername: t.author_username })) });
-});
-
-catalogApp.post('/api/catalog/themes/:id/apply', catalogAuth, (req, res) => {
-  const theme = stmts.getCatalogThemeById.get(req.params.id);
-  if (!theme) return res.status(404).json({ error: 'Тема не найдена' });
-  const premium = stmts.getPremium.get(req.user.id);
-  const isPremium = req.user.is_admin || (premium && new Date(premium.expires_at) > new Date());
-  if (!isPremium) return res.status(403).json({ error: 'Только для Premium', code: 'PREMIUM_REQUIRED' });
-  stmts.upsertUserTheme.run(req.user.id, req.params.id);
-  res.json({ ok: true, colors: JSON.parse(theme.colors) });
-});
-
-catalogApp.post('/api/catalog/themes', catalogAuth, (req, res) => {
-  const { name, slug, colors, previewColors } = req.body;
-  if (!name?.trim() || !slug?.trim() || !colors) return res.status(400).json({ error: 'Обязательные поля: name, slug, colors' });
-  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-  if (db.prepare("SELECT 1 FROM catalog_themes WHERE slug = ?").get(cleanSlug)) return res.status(409).json({ error: 'Slug занят' });
-  const id = uuidv4();
-  stmts.insertCatalogTheme.run(id, name.trim(), cleanSlug, req.user.id, JSON.stringify(colors), previewColors ? JSON.stringify(previewColors) : null);
-  res.json({ ok: true, theme: { id, name: name.trim(), slug: cleanSlug } });
-});
-
-catalogApp.get('/api/catalog/languages', catalogAuth, (_req, res) => {
-  const langs = stmts.listCatalogLangs.all();
-  res.json({ langs: langs.map(l => ({ id: l.id, name: l.name, slug: l.slug, langCode: l.lang_code, authorUsername: l.author_username })) });
-});
-
-catalogApp.post('/api/catalog/languages', catalogAuth, (req, res) => {
-  const { name, slug, langCode, translations } = req.body;
-  if (!name?.trim() || !slug?.trim() || !langCode?.trim() || !translations) return res.status(400).json({ error: 'Обязательные поля: name, slug, langCode, translations' });
-  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-  if (db.prepare("SELECT 1 FROM catalog_language_packs WHERE slug = ?").get(cleanSlug)) return res.status(409).json({ error: 'Slug занят' });
-  const id = uuidv4();
-  stmts.insertCatalogLang.run(id, name.trim(), cleanSlug, langCode.trim(), req.user.id, JSON.stringify(translations));
-  res.json({ ok: true, lang: { id, name: name.trim(), slug: cleanSlug } });
-});
-
-catalogApp.get('/api/catalog/languages/:id/data', catalogAuth, (req, res) => {
-  const lang = stmts.getCatalogLangById.get(req.params.id);
-  if (!lang) return res.status(404).json({ error: 'Языковой пак не найден' });
-  res.json({ lang: { id: lang.id, name: lang.name, langCode: lang.lang_code, translations: JSON.parse(lang.translations) } });
-});
-
-catalogApp.post('/api/catalog/languages/:id/apply', catalogAuth, (req, res) => {
-  const lang = stmts.getCatalogLangById.get(req.params.id);
-  if (!lang) return res.status(404).json({ error: 'Языковой пак не найден' });
-  stmts.upsertUserLang.run(req.user.id, req.params.id);
-  res.json({ ok: true });
-});
-
-const CATALOG_HTML = `<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Omni — Каталог</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{--bg0:#0b0b13;--bg1:#11111a;--bg2:#17171f;--bg3:#1e1e28;--bg4:#252530;--border:#2a2a38;--text:#e4e4f0;--text2:#9595aa;--text3:#5a5a72;--accent:#7c3aed;--accent2:#6d28d9;--green:#22c55e;--red:#ef4444;--radius:12px}
-body{font-family:'Inter',sans-serif;background:var(--bg0);color:var(--text);min-height:100vh}
-.header{background:var(--bg1);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{font-size:20px;font-weight:700;color:var(--accent)}.logo span{color:var(--text)}
-.user-info{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text2)}
-.tabs{display:flex;gap:4px;background:var(--bg1);border-bottom:1px solid var(--border);padding:0 24px}
-.tab{padding:14px 20px;font-size:14px;font-weight:500;color:var(--text2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:.2s}
-.tab:hover{color:var(--text)}.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-.content{max-width:1100px;margin:0 auto;padding:24px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:16px}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:.2s}
-.card:hover{border-color:var(--accent);transform:translateY(-2px)}
-.card-cover{width:100%;aspect-ratio:1;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}
-.card-cover img{width:100%;height:100%;object-fit:cover}
-.card-body{padding:12px}
-.card-name{font-weight:600;font-size:14px;margin-bottom:4px}
-.card-meta{font-size:12px;color:var(--text2)}
-.card-link{font-size:11px;color:var(--accent);margin-top:4px;word-break:break-all}
-.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:500;transition:.2s}
-.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent2)}
-.btn-outline{background:none;border:1px solid var(--border);color:var(--text)}.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
-.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}
-.modal.open{display:flex}
-.modal-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto}
-.modal-title{font-size:18px;font-weight:700;margin-bottom:16px}
-.form-group{margin-bottom:14px}
-.form-group label{display:block;font-size:13px;color:var(--text2);margin-bottom:6px}
-.form-group input,.form-group textarea,.form-group select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none}
-.form-group input:focus,.form-group textarea:focus{border-color:var(--accent)}
-.color-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.color-row{display:flex;align-items:center;gap:8px}
-.color-row label{font-size:12px;color:var(--text2);flex:1}
-.color-row input[type=color]{width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none}
-.sticker-popup-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:16px 0}
-.sticker-popup-item img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:8px;background:var(--bg3);padding:4px}
-.premium-badge{background:linear-gradient(135deg,#ffd700,#ff8c00);color:#000;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
-.theme-preview{display:flex;gap:4px;margin-bottom:8px}
-.theme-swatch{width:24px;height:24px;border-radius:50%}
-.error{color:var(--red);font-size:13px;margin-top:8px}
-.success{color:var(--green);font-size:13px;margin-top:8px}
-.empty{text-align:center;padding:60px 20px;color:var(--text2)}
-.empty-icon{font-size:48px;margin-bottom:16px}
-.create-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-.section-title{font-size:18px;font-weight:700}
-.emoji-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(60px,1fr));gap:8px;margin-top:16px}
-.emoji-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;cursor:pointer}
-.emoji-card img{width:40px;height:40px;object-fit:contain}
-.emoji-card-name{font-size:11px;color:var(--text2);margin-top:4px}
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
-#auth-screen{position:fixed;inset:0;background:var(--bg0);display:flex;align-items:center;justify-content:center;z-index:1000}
-.auth-box{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:40px;width:100%;max-width:380px;text-align:center}
-.auth-title{font-size:24px;font-weight:700;margin-bottom:8px}.auth-sub{font-size:14px;color:var(--text2);margin-bottom:24px}
-.auth-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;outline:none;margin-bottom:12px;text-align:center}
-.auth-input:focus{border-color:var(--accent)}
-</style>
-</head>
-<body>
-<div id="auth-screen">
-  <div class="auth-box">
-    <div class="auth-title">🎨 Omni Каталог</div>
-    <div class="auth-sub">Введите токен из приложения или откройте по ссылке</div>
-    <input id="auth-token-input" class="auth-input" placeholder="Вставьте токен..." autofocus>
-    <button class="btn btn-primary" style="width:100%;padding:12px" onclick="authWithToken()">Войти</button>
-    <div id="auth-err" class="error"></div>
-  </div>
-</div>
-
-<div id="app" style="display:none">
-  <div class="header">
-    <div class="logo">Omni<span> Каталог</span></div>
-    <div class="user-info">
-      <span id="header-user">...</span>
-      <span id="header-premium"></span>
-    </div>
-  </div>
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('stickers')">📦 Стикеры</button>
-    <button class="tab" onclick="switchTab('emojis')">😊 Эмодзи</button>
-    <button class="tab" onclick="switchTab('themes')">🎨 Темы</button>
-    <button class="tab" onclick="switchTab('languages')">🌐 Языки</button>
-  </div>
-  <div class="content" id="tab-content"></div>
-</div>
-
-<div class="modal" id="modal">
-  <div class="modal-box" id="modal-box"></div>
-</div>
-
-<script>
-let TOKEN = '', IS_PREMIUM = false, ME = null;
-const API = '';
-
-function getToken() { return TOKEN || new URLSearchParams(location.search).get('catalog_token') || localStorage.getItem('catalog_token') || ''; }
-
-async function apiFetch(path, opts = {}) {
-  const t = getToken();
-  const url = path + (path.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
-  const res = await fetch(url, { headers: { 'Content-Type': 'application/json', ...opts.headers }, ...opts });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Ошибка');
-  return data;
-}
-
-async function authWithToken() {
-  const t = document.getElementById('auth-token-input').value.trim();
-  if (!t) return;
-  TOKEN = t;
-  try {
-    const d = await apiFetch('/api/catalog/me');
-    ME = d.user; IS_PREMIUM = d.isPremium;
-    localStorage.setItem('catalog_token', t);
-    showApp();
-  } catch(e) {
-    document.getElementById('auth-err').textContent = e.message;
-    TOKEN = '';
-  }
-}
-
-async function tryAutoAuth() {
-  TOKEN = getToken();
-  if (!TOKEN) return;
-  try {
-    const d = await apiFetch('/api/catalog/me');
-    ME = d.user; IS_PREMIUM = d.isPremium;
-    if (new URLSearchParams(location.search).get('catalog_token')) {
-      localStorage.setItem('catalog_token', TOKEN);
-      history.replaceState({}, '', location.pathname);
-    }
-    showApp();
-  } catch { TOKEN = ''; localStorage.removeItem('catalog_token'); }
-}
-
-function showApp() {
-  document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('header-user').textContent = '@' + ME.username;
-  if (IS_PREMIUM) document.getElementById('header-premium').innerHTML = '<span class="premium-badge">✨ Premium</span>';
-  switchTab('stickers');
-}
-
-function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['stickers','emojis','themes','languages'][i] === tab));
-  if (tab === 'stickers') loadStickers();
-  else if (tab === 'emojis') loadEmojis();
-  else if (tab === 'themes') loadThemes();
-  else if (tab === 'languages') loadLanguages();
-}
-
-function openModal(html) {
-  document.getElementById('modal-box').innerHTML = html;
-  document.getElementById('modal').classList.add('open');
-}
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
-document.addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
-
-async function loadStickers() {
-  const c = document.getElementById('tab-content');
-  c.innerHTML = '<div class="create-bar"><span class="section-title">📦 Стикер-паки</span><button class="btn btn-primary" onclick="createStickerPackModal()">+ Создать пак</button></div><div id="packs-grid" class="grid"><div class="empty"><div class="empty-icon">📦</div>Загрузка...</div></div>';
-  try {
-    const d = await apiFetch('/api/catalog/sticker-packs');
-    const g = document.getElementById('packs-grid');
-    if (!d.packs.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📦</div>Нет стикер-паков</div>'; return; }
-    g.innerHTML = d.packs.map(p => \`
-      <div class="card" onclick="viewPack('\${p.id}','\${escH(p.name)}')">
-        <div class="card-cover">\${p.coverUrl ? \`<img src="\${p.coverUrl.startsWith('/') ? 'https://omnii.duckdns.org:3000' + p.coverUrl : p.coverUrl}" loading="lazy">\` : '📦'}</div>
-        <div class="card-body">
-          <div class="card-name">\${escH(p.name)}</div>
-          <div class="card-meta">\${p.stickerCount} стикеров • @\${escH(p.authorUsername)}</div>
-          <div class="card-link">Om.org/\${escH(p.slug)}</div>
-        </div>
-      </div>\`).join('');
-  } catch(e) { document.getElementById('packs-grid').innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">⚠️</div>' + e.message + '</div>'; }
-}
-
-async function viewPack(id, name) {
-  try {
-    const d = await apiFetch('/api/catalog/sticker-packs/' + id);
-    const p = d.pack;
-    const stickersHtml = p.stickers?.length ? p.stickers.map(s => \`
-      <div style="text-align:center">
-        <img src="\${s.imageUrl.startsWith('/') ? 'https://omnii.duckdns.org:3000' + s.imageUrl : s.imageUrl}" style="width:70px;height:70px;object-fit:contain;border-radius:8px;background:var(--bg3);padding:4px" loading="lazy">
-        <div style="font-size:11px;color:var(--text2);margin-top:4px">\${escH(s.name)}</div>
-      </div>\`).join('') : '<div style="color:var(--text2);font-size:13px">Нет стикеров</div>';
-    openModal(\`
-      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:16px">
-        <div class="modal-title">📦 \${escH(p.name)}</div>
-        <button class="btn btn-outline" onclick="closeModal()" style="padding:6px 12px">✕</button>
-      </div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:4px">@\${escH(p.authorUsername)} • \${p.stickerCount} стикеров</div>
-      <div style="font-size:12px;color:var(--accent);margin-bottom:16px">Om.org/\${escH(p.slug)}</div>
-      <div class="sticker-popup-grid">\${stickersHtml}</div>
-      <button class="btn btn-primary" style="width:100%" onclick="addPack('\${p.id}')">➕ Добавить пак</button>
-    \`);
-  } catch(e) { alert(e.message); }
-}
-
-async function addPack(id) {
-  try { await apiFetch('/api/catalog/sticker-packs/' + id + '/add', { method: 'POST', body: '{}' }); closeModal(); alert('✅ Пак добавлен! Откройте приложение.'); }
-  catch(e) { alert(e.message); }
-}
-
-function createStickerPackModal() {
-  openModal(\`
-    <div class="modal-title">📦 Создать стикер-пак</div>
-    <div class="form-group"><label>Название</label><input id="sp-name" placeholder="Мой пак"></div>
-    <div class="form-group"><label>Slug (ссылка: Om.org/slug)</label><input id="sp-slug" placeholder="moy_pak"></div>
-    <div class="form-group"><label>Описание</label><input id="sp-desc" placeholder="Необязательно"></div>
-    <div id="sp-err" class="error"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-outline" onclick="closeModal()" style="flex:1">Отмена</button>
-      <button class="btn btn-primary" onclick="doCreatePack()" style="flex:1">Создать</button>
-    </div>
-  \`);
-}
-
-async function doCreatePack() {
-  const name = document.getElementById('sp-name').value.trim();
-  const slug = document.getElementById('sp-slug').value.trim();
-  const desc = document.getElementById('sp-desc').value.trim();
-  if (!name || !slug) { document.getElementById('sp-err').textContent = 'Заполните название и slug'; return; }
-  try {
-    await apiFetch('/api/catalog/sticker-packs', { method: 'POST', body: JSON.stringify({ name, slug, description: desc }) });
-    closeModal(); loadStickers(); alert('✅ Пак создан! Зайдите в приложение чтобы добавить стикеры.');
-  } catch(e) { document.getElementById('sp-err').textContent = e.message; }
-}
-
-async function loadEmojis() {
-  const c = document.getElementById('tab-content');
-  c.innerHTML = '<div class="create-bar"><span class="section-title">😊 Кастомные эмодзи</span><button class="btn btn-primary" onclick="createEmojiModal()">+ Создать эмодзи</button></div><div id="emojis-grid" class="emoji-grid"><div class="empty" style="grid-column:1/-1"><div class="empty-icon">😊</div>Загрузка...</div></div>';
-  try {
-    const d = await apiFetch('/api/catalog/emojis');
-    const g = document.getElementById('emojis-grid');
-    if (!d.emojis.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">😊</div>Нет эмодзи</div>'; return; }
-    g.innerHTML = d.emojis.map(e => \`
-      <div class="emoji-card" title="::\${escH(e.name)}::">
-        <img src="\${e.imageUrl.startsWith('/') ? 'https://omnii.duckdns.org:3000' + e.imageUrl : e.imageUrl}" loading="lazy">
-        <div class="emoji-card-name">:\${escH(e.name)}:</div>
-      </div>\`).join('');
-  } catch(e) { document.getElementById('emojis-grid').innerHTML = '<div class="empty" style="grid-column:1/-1">⚠️ ' + e.message + '</div>'; }
-}
-
-function createEmojiModal() {
-  openModal(\`
-    <div class="modal-title">😊 Создать эмодзи</div>
-    <div class="form-group"><label>Название (будет :name:)</label><input id="em-name" placeholder="my_emoji"></div>
-    <div class="form-group"><label>Изображение (до 2МБ, PNG/GIF)</label><input type="file" id="em-file" accept="image/*" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px;width:100%;color:var(--text)"></div>
-    <div id="em-err" class="error"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-outline" onclick="closeModal()" style="flex:1">Отмена</button>
-      <button class="btn btn-primary" onclick="doCreateEmoji()" style="flex:1">Создать</button>
-    </div>
-  \`);
-}
-
-async function doCreateEmoji() {
-  const name = document.getElementById('em-name').value.trim();
-  const file = document.getElementById('em-file').files[0];
-  if (!name || !file) { document.getElementById('em-err').textContent = 'Заполните все поля'; return; }
-  const fd = new FormData(); fd.append('name', name); fd.append('image', file);
-  try {
-    const t = getToken();
-    const res = await fetch('/api/custom-emojis?token=' + encodeURIComponent(t), { method: 'POST', body: fd, headers: { 'x-catalog-token': t } });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.error);
-    closeModal(); loadEmojis();
-  } catch(e) { document.getElementById('em-err').textContent = e.message; }
-}
-
-async function loadThemes() {
-  const c = document.getElementById('tab-content');
-  c.innerHTML = '<div class="create-bar"><span class="section-title">🎨 Темы оформления</span><button class="btn btn-primary" onclick="createThemeModal()">+ Создать тему</button></div>' + (!IS_PREMIUM ? '<div style="background:#fbbf2420;border:1px solid #fbbf24;border-radius:8px;padding:12px;font-size:13px;color:#fbbf24;margin:12px 0">⭐ Для установки тем требуется Premium</div>' : '') + '<div id="themes-grid" class="grid"><div class="empty"><div class="empty-icon">🎨</div>Загрузка...</div></div>';
-  try {
-    const d = await apiFetch('/api/catalog/themes');
-    const g = document.getElementById('themes-grid');
-    if (!d.themes.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🎨</div>Нет тем</div>'; return; }
-    g.innerHTML = d.themes.map(t => {
-      const swatches = Object.values(t.colors || {}).slice(0,5).map(c => \`<div class="theme-swatch" style="background:\${c}"></div>\`).join('');
-      return \`<div class="card" onclick="applyTheme('\${t.id}','\${escH(t.name)}')">
-        <div class="card-cover" style="background:linear-gradient(135deg,\${Object.values(t.colors||{})[0]||'#7c3aed'},\${Object.values(t.colors||{})[1]||'#1e1e28'})">\${swatches ? '<div class="theme-preview" style="justify-content:center">' + swatches + '</div>' : '🎨'}</div>
-        <div class="card-body">
-          <div class="card-name">\${escH(t.name)}</div>
-          <div class="card-meta">@\${escH(t.authorUsername)}</div>
-          \${!IS_PREMIUM ? '<span class="premium-badge">✨ Premium</span>' : ''}
-        </div>
-      </div>\`;
-    }).join('');
-  } catch(e) { document.getElementById('themes-grid').innerHTML = '<div class="empty" style="grid-column:1/-1">⚠️ ' + e.message + '</div>'; }
-}
-
-async function applyTheme(id, name) {
-  if (!IS_PREMIUM) { alert('⭐ Для установки тем требуется Premium-подписка'); return; }
-  if (!confirm(\`Установить тему "\${name}"?\`)) return;
-  try {
-    await apiFetch('/api/catalog/themes/' + id + '/apply', { method: 'POST', body: '{}' });
-    alert('✅ Тема применена! Откройте приложение — изменения применятся.');
-  } catch(e) { alert(e.message); }
-}
-
-function createThemeModal() {
-  const defaultColors = { '--bg0': '#0b0b13', '--bg1': '#11111a', '--bg2': '#17171f', '--bg3': '#1e1e28', '--accent': '#7c3aed', '--text': '#e4e4f0' };
-  const rows = Object.entries(defaultColors).map(([k, v]) => \`
-    <div class="color-row"><label>\${k}</label><input type="color" value="\${v}" id="color_\${k.replace(/--/g,'').replace(/-/g,'_')}"></div>\`).join('');
-  openModal(\`
-    <div class="modal-title">🎨 Создать тему</div>
-    <div class="form-group"><label>Название</label><input id="th-name" placeholder="Моя тема"></div>
-    <div class="form-group"><label>Slug</label><input id="th-slug" placeholder="moya_tema"></div>
-    <div class="form-group"><label>Цвета</label><div class="color-grid">\${rows}</div></div>
-    <div id="th-err" class="error"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-outline" onclick="closeModal()" style="flex:1">Отмена</button>
-      <button class="btn btn-primary" onclick="doCreateTheme()" style="flex:1">Создать</button>
-    </div>
-  \`);
-}
-
-async function doCreateTheme() {
-  const name = document.getElementById('th-name').value.trim();
-  const slug = document.getElementById('th-slug').value.trim();
-  const colorKeys = ['bg0','bg1','bg2','bg3','accent','text'];
-  const colors = {};
-  colorKeys.forEach(k => { const el = document.getElementById('color_' + k); if (el) colors['--' + k.replace(/_/g,'-')] = el.value; });
-  if (!name || !slug) { document.getElementById('th-err').textContent = 'Заполните название и slug'; return; }
-  try {
-    await apiFetch('/api/catalog/themes', { method: 'POST', body: JSON.stringify({ name, slug, colors }) });
-    closeModal(); loadThemes(); alert('✅ Тема создана!');
-  } catch(e) { document.getElementById('th-err').textContent = e.message; }
-}
-
-async function loadLanguages() {
-  const c = document.getElementById('tab-content');
-  c.innerHTML = '<div class="create-bar"><span class="section-title">🌐 Языковые паки</span><button class="btn btn-primary" onclick="createLangModal()">+ Создать языковой пак</button></div><div id="langs-grid" class="grid"><div class="empty"><div class="empty-icon">🌐</div>Загрузка...</div></div>';
-  try {
-    const d = await apiFetch('/api/catalog/languages');
-    const g = document.getElementById('langs-grid');
-    if (!d.langs.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🌐</div>Нет языковых паков</div>'; return; }
-    g.innerHTML = d.langs.map(l => \`
-      <div class="card" onclick="applyLang('\${l.id}','\${escH(l.name)}')">
-        <div class="card-cover">🌐</div>
-        <div class="card-body">
-          <div class="card-name">\${escH(l.name)}</div>
-          <div class="card-meta">[\${escH(l.langCode)}] • @\${escH(l.authorUsername)}</div>
-        </div>
-      </div>\`).join('');
-  } catch(e) { document.getElementById('langs-grid').innerHTML = '<div class="empty" style="grid-column:1/-1">⚠️ ' + e.message + '</div>'; }
-}
-
-async function applyLang(id, name) {
-  if (!confirm(\`Применить языковой пак "\${name}"?\`)) return;
-  try {
-    await apiFetch('/api/catalog/languages/' + id + '/apply', { method: 'POST', body: '{}' });
-    alert('✅ Языковой пак применён! Перезапустите приложение.');
-  } catch(e) { alert(e.message); }
-}
-
-function createLangModal() {
-  openModal(\`
-    <div class="modal-title">🌐 Создать языковой пак</div>
-    <div class="form-group"><label>Название</label><input id="lg-name" placeholder="Мой язык"></div>
-    <div class="form-group"><label>Slug</label><input id="lg-slug" placeholder="moy_yazyk"></div>
-    <div class="form-group"><label>Код языка (ru, en, de...)</label><input id="lg-code" placeholder="ru"></div>
-    <div class="form-group"><label>Переводы (JSON-объект ключ:значение)</label><textarea id="lg-trans" rows="8" placeholder='{"Чаты":"Chats","Серверы":"Servers"}'></textarea></div>
-    <div id="lg-err" class="error"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-outline" onclick="closeModal()" style="flex:1">Отмена</button>
-      <button class="btn btn-primary" onclick="doCreateLang()" style="flex:1">Создать</button>
-    </div>
-  \`);
-}
-
-async function doCreateLang() {
-  const name = document.getElementById('lg-name').value.trim();
-  const slug = document.getElementById('lg-slug').value.trim();
-  const langCode = document.getElementById('lg-code').value.trim();
-  let translations;
-  try { translations = JSON.parse(document.getElementById('lg-trans').value); } catch { document.getElementById('lg-err').textContent = 'Неверный JSON'; return; }
-  if (!name || !slug || !langCode) { document.getElementById('lg-err').textContent = 'Заполните все поля'; return; }
-  try {
-    await apiFetch('/api/catalog/languages', { method: 'POST', body: JSON.stringify({ name, slug, langCode, translations }) });
-    closeModal(); loadLanguages(); alert('✅ Языковой пак создан!');
-  } catch(e) { document.getElementById('lg-err').textContent = e.message; }
-}
-
-function escH(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-tryAutoAuth();
-</script>
-</body>
-</html>`;
-
-catalogApp.get('/', (req, res) => {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(CATALOG_HTML);
-});
-
-// Проброс эндпоинтов для эмодзи через каталог-сервер (только чтение; upload через main)
-catalogApp.post('/api/custom-emojis', catalogAuth, emojiUpload.single('image'), (req, res) => {
+// POST /api/custom-emojis
+app.post("/api/custom-emojis", authMiddleware, emojiUpload.single("image"), (req, res) => {
   const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'name обязателен' });
-  const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
-  if (cleanName.length < 2) return res.status(400).json({ error: 'Имя слишком короткое' });
-  if (!req.file) return res.status(400).json({ error: 'Файл обязателен' });
-  const existing = stmts.getCustomEmojiByName.get(cleanName);
-  if (existing) return res.status(409).json({ error: 'Такой эмодзи уже существует' });
+  if (!name?.trim()) return res.status(400).json({ error: "name обязателен" });
+  const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (cleanName.length < 2) return res.status(400).json({ error: "Имя слишком короткое" });
+  if (!req.file) return res.status(400).json({ error: "Файл обязателен" });
+  if (stickerStmts.getCustomEmojiByName.get(cleanName)) return res.status(409).json({ error: "Такой эмодзи уже существует" });
   const id = uuidv4();
   const imageUrl = `/uploads/emojis/${req.file.filename}`;
-  stmts.insertCustomEmoji.run(id, cleanName, imageUrl, req.user.id);
+  stickerStmts.insertCustomEmoji.run(id, cleanName, imageUrl, req.user.id);
   res.json({ emoji: { id, name: cleanName, imageUrl, authorUsername: req.user.username } });
 });
 
-catalogApp.post('/api/catalog/sticker-packs', catalogAuth, (req, res) => {
-  const { name, slug, description } = req.body;
-  if (!name?.trim() || !slug?.trim()) return res.status(400).json({ error: 'name и slug обязательны' });
-  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-  if (cleanSlug.length < 2) return res.status(400).json({ error: 'Slug слишком короткий' });
-  const existing = stmts.getStickerPackBySlug.get(cleanSlug);
-  if (existing) return res.status(409).json({ error: 'Такой slug уже занят' });
-  const id = uuidv4();
-  stmts.insertStickerPack.run(id, name.trim(), cleanSlug, description?.trim() || null, req.user.id, null);
-  stmts.addUserStickerPack.run(req.user.id, id);
-  const pack = stmts.getStickerPackById.get(id);
-  res.json({ ok: true, pack: formatStickerPack(pack, []) });
+// DELETE /api/custom-emojis/:id
+app.delete("/api/custom-emojis/:id", authMiddleware, (req, res) => {
+  const emoji = stickerStmts.getCustomEmojiById.get(req.params.id);
+  if (!emoji) return res.status(404).json({ error: "Эмодзи не найден" });
+  if (emoji.author_id !== req.user.id && !req.user.is_admin) return res.status(403).json({ error: "Нет прав" });
+  stickerStmts.deleteCustomEmoji.run(req.params.id);
+  res.json({ ok: true });
 });
 
-let catalogServer;
-if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
-  const sslOptions = { key: fs.readFileSync(sslKeyPath), cert: fs.readFileSync(sslCertPath) };
-  catalogServer = https.createServer(sslOptions, catalogApp);
-} else {
-  catalogServer = http.createServer(catalogApp);
+// ─── Catalog Session Token ───────────────────────────────────────────────────
+
+app.post("/api/catalog/session-link", authMiddleware, (req, res) => {
+  stickerStmts.cleanupCatalogTokens.run();
+  const token = uuidv4();
+  stickerStmts.insertCatalogToken.run(token, req.user.id);
+  res.json({ token });
+});
+
+// ─── Catalog Themes API ──────────────────────────────────────────────────────
+
+app.get("/api/catalog/themes", authMiddleware, (req, res) => {
+  const themes = stickerStmts.getAllCatalogThemes.all();
+  res.json({ themes: themes.map(t => ({ id: t.id, name: t.name, slug: t.slug, authorUsername: t.author_username, colors: JSON.parse(t.colors || "{}") })) });
+});
+
+app.post("/api/catalog/themes", authMiddleware, (req, res) => {
+  const { name, slug, colors } = req.body;
+  if (!name?.trim() || !slug?.trim()) return res.status(400).json({ error: "name и slug обязательны" });
+  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+  if (stickerStmts.getAllCatalogThemes.all().find(t => t.slug === cleanSlug)) return res.status(409).json({ error: "Slug занят" });
+  const id = uuidv4();
+  stickerStmts.insertCatalogTheme.run(id, name.trim(), cleanSlug, req.user.id, JSON.stringify(colors || {}));
+  res.json({ ok: true, id });
+});
+
+app.post("/api/catalog/themes/:id/apply", authMiddleware, (req, res) => {
+  const theme = stickerStmts.getCatalogThemeById.get(req.params.id);
+  if (!theme) return res.status(404).json({ error: "Тема не найдена" });
+  stickerStmts.setAppliedTheme.run(req.user.id, req.params.id);
+  res.json({ ok: true, colors: JSON.parse(theme.colors || "{}") });
+});
+
+app.delete("/api/catalog/themes/:id", authMiddleware, (req, res) => {
+  const theme = stickerStmts.getCatalogThemeById.get(req.params.id);
+  if (!theme) return res.status(404).json({ error: "Тема не найдена" });
+  if (theme.author_id !== req.user.id && !req.user.is_admin) return res.status(403).json({ error: "Нет прав" });
+  stickerStmts.deleteCatalogTheme.run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ─── Catalog Language Packs API ──────────────────────────────────────────────
+
+app.get("/api/catalog/languages", authMiddleware, (req, res) => {
+  const packs = stickerStmts.getAllLangPacks.all();
+  res.json({ packs: packs.map(p => ({ id: p.id, name: p.name, languageCode: p.language_code, authorUsername: p.author_username })) });
+});
+
+app.post("/api/catalog/languages", authMiddleware, (req, res) => {
+  const { name, languageCode, strings } = req.body;
+  if (!name?.trim() || !languageCode?.trim()) return res.status(400).json({ error: "name и languageCode обязательны" });
+  const id = uuidv4();
+  stickerStmts.insertLangPack.run(id, name.trim(), languageCode.trim().toLowerCase(), req.user.id, JSON.stringify(strings || {}));
+  res.json({ ok: true, id });
+});
+
+app.delete("/api/catalog/languages/:id", authMiddleware, (req, res) => {
+  stickerStmts.deleteLangPack.run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ─── Catalog HTML (на той же port 3000, путь /catalog) ───────────────────────
+
+function buildCatalogHtml(token, isPremium) {
+  return '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Omni Catalog</title>' +
+  '<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f0f17;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}' +
+  '.header{background:#1a1a2e;border-bottom:1px solid #2d2d4e;padding:16px 24px;display:flex;align-items:center;gap:12px}' +
+  '.logo{font-size:24px;font-weight:700;color:#a78bfa}.subtitle{color:#94a3b8;font-size:13px}' +
+  '.tabs{display:flex;gap:4px;padding:16px 24px 0;border-bottom:1px solid #2d2d4e;background:#13131f}' +
+  '.tab{padding:10px 20px;border:none;background:none;color:#94a3b8;cursor:pointer;border-radius:8px 8px 0 0;font-size:14px;transition:all .2s}' +
+  '.tab.active{background:#1a1a2e;color:#a78bfa;font-weight:600}' +
+  '.content{padding:24px;max-width:1200px;margin:0 auto}' +
+  '.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:16px}' +
+  '.card{background:#1a1a2e;border:1px solid #2d2d4e;border-radius:12px;overflow:hidden;transition:transform .2s,border-color .2s;cursor:pointer}' +
+  '.card:hover{transform:translateY(-2px);border-color:#a78bfa}' +
+  '.card-cover{height:120px;background:#2d2d4e;display:flex;align-items:center;justify-content:center;font-size:40px}' +
+  '.card-cover img{width:100%;height:100%;object-fit:cover}' +
+  '.card-body{padding:12px}.card-name{font-weight:600;font-size:14px;margin-bottom:4px}' +
+  '.card-author{font-size:12px;color:#94a3b8}.card-actions{display:flex;gap:8px;margin-top:10px}' +
+  '.btn{padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s}' +
+  '.btn-primary{background:#7c3aed;color:#fff}.btn-primary:hover{background:#6d28d9}' +
+  '.btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}' +
+  '.btn-secondary{background:#2d2d4e;color:#e2e8f0}.btn-secondary:hover{background:#3d3d5e}' +
+  '.empty{text-align:center;padding:48px;color:#94a3b8}.empty-icon{font-size:48px;margin-bottom:12px}' +
+  '.section-title{font-size:18px;font-weight:700;margin-bottom:4px}.section-sub{font-size:13px;color:#94a3b8;margin-bottom:16px}' +
+  '.create-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}' +
+  '.stickers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;margin-top:8px}' +
+  '.sticker-thumb{width:80px;height:80px;object-fit:contain;border-radius:8px;background:#2d2d4e;padding:4px}' +
+  '.premium-note{background:#fbbf2420;border:1px solid #fbbf24;border-radius:8px;padding:12px;font-size:13px;color:#fbbf24;margin:12px 0}' +
+  '.modal-bg{display:none;position:fixed;inset:0;background:#0008;z-index:100;align-items:center;justify-content:center}' +
+  '.modal-bg.open{display:flex}.modal{background:#1a1a2e;border:1px solid #2d2d4e;border-radius:16px;padding:24px;min-width:340px;max-width:95vw}' +
+  '.modal h3{margin-bottom:16px;font-size:16px}.input{width:100%;background:#0f0f17;border:1px solid #2d2d4e;border-radius:8px;color:#e2e8f0;padding:10px 12px;font-size:14px;margin-bottom:10px}' +
+  '.input:focus{outline:none;border-color:#7c3aed}.err{color:#f87171;font-size:13px;margin-bottom:8px;min-height:18px}' +
+  '.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}' +
+  '#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh}' +
+  '.auth-box{background:#1a1a2e;border:1px solid #2d2d4e;border-radius:16px;padding:32px;text-align:center;max-width:360px;width:90%}' +
+  '.auth-box h2{margin-bottom:8px;color:#a78bfa}.auth-box p{color:#94a3b8;font-size:14px;margin-bottom:24px}' +
+  '</style></head><body>' +
+  '<div id="auth-screen"><div class="auth-box"><div style="font-size:48px;margin-bottom:12px">🎨</div><h2>Omni Catalog</h2><p>Проверка авторизации...</p></div></div>' +
+  '<div id="app" style="display:none">' +
+  '<div class="header"><span class="logo">🎨 Omni Catalog</span><div><div class="subtitle" id="user-label"></div></div><div style="margin-left:auto;display:flex;gap:8px"><span id="premium-badge"></span></div></div>' +
+  '<div class="tabs"><button class="tab active" onclick="switchTab(\'stickers\',this)">🏷️ Стикеры</button><button class="tab" onclick="switchTab(\'emojis\',this)">😎 Эмодзи</button><button class="tab" onclick="switchTab(\'themes\',this)">🎨 Темы</button><button class="tab" onclick="switchTab(\'languages\',this)">🌐 Языки</button></div>' +
+  '<div class="content" id="tab-content"></div></div>' +
+  '<div class="modal-bg" id="modal"><div class="modal" id="modal-inner"></div></div>' +
+  '<script>' +
+  'const TOKEN = new URLSearchParams(location.search).get("catalog_token") || "";' +
+  'const BASE = location.origin;' +
+  'let USER = null; let IS_PREMIUM = ' + (isPremium ? 'true' : 'false') + ';' +
+  'function escH(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}' +
+  'function fullUrl(u){return u&&u.startsWith("http")?u:BASE+u}' +
+  'async function apiFetch(path,opts={}){' +
+  'const h={"Content-Type":"application/json"};' +
+  'const t=localStorage.getItem("token");if(t)h["Authorization"]="Bearer "+t;' +
+  'const r=await fetch(BASE+path,{...opts,headers:{...h,...(opts.headers||{})}});' +
+  'return r.json();}' +
+  'async function tryAuth(){' +
+  'if(TOKEN){try{const r=await fetch(BASE+"/api/catalog/auth-by-token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:TOKEN})});const d=await r.json();' +
+  'if(d.token){localStorage.setItem("token",d.token);USER=d.user;showApp();return;}}catch(e){}}' +
+  'const t=localStorage.getItem("token");' +
+  'if(t){try{const d=await apiFetch("/api/auth/me");if(d.user){USER=d.user;showApp();return;}}catch(e){}}' +
+  'document.getElementById("auth-screen").innerHTML=\'<div class="auth-box"><div style="font-size:48px">🔒</div><h2>Войдите в Omni</h2><p>Откройте каталог через приложение Omni</p></div>\';}' +
+  'function showApp(){' +
+  'document.getElementById("auth-screen").style.display="none";' +
+  'document.getElementById("app").style.display="block";' +
+  'document.getElementById("user-label").textContent="@"+(USER.username||"");' +
+  'if(IS_PREMIUM)document.getElementById("premium-badge").innerHTML=\'<span style="background:#fbbf2420;color:#fbbf24;padding:4px 10px;border-radius:20px;font-size:12px">⭐ Premium</span>\';' +
+  'loadStickers();}' +
+  'function switchTab(tab,el){document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));el.classList.add("active");' +
+  'if(tab==="stickers")loadStickers();else if(tab==="emojis")loadEmojis();else if(tab==="themes")loadThemes();else if(tab==="languages")loadLanguages();}' +
+  'async function loadStickers(){' +
+  'const c=document.getElementById("tab-content");c.innerHTML=\'<div class="create-bar"><div><div class="section-title">🏷️ Стикерпаки</div></div><button class="btn btn-primary" onclick="createPackModal()">+ Создать пак</button></div><div id="packs-grid" class="grid"><div class="empty"><div class="empty-icon">🏷️</div>Загрузка...</div></div>\';' +
+  'try{const d=await apiFetch("/api/sticker-packs");const g=document.getElementById("packs-grid");' +
+  'if(!d.packs||!d.packs.length){g.innerHTML=\'<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📦</div>Паков пока нет</div>\';return;}' +
+  'g.innerHTML=d.packs.map(p=>{const cover=p.coverUrl?\'<img src="\'+fullUrl(p.coverUrl)+\'" style="width:100%;height:100%;object-fit:cover">\':\'<span style="font-size:40px">📦</span>\';' +
+  'const stks=p.stickers.slice(0,3).map(s=>\'<img src="\'+fullUrl(s.fileUrl)+\'" class="sticker-thumb">\').join("");' +
+  'return\'<div class="card"><div class="card-cover">\'+cover+\'</div><div class="card-body"><div class="card-name">\'+escH(p.name)+\'</div><div class="card-author">@\'+escH(p.authorUsername||"")+\'</div><div class="card-actions"><button class="btn btn-primary" onclick="addPack(\\\'\'+p.id+\'\\\')">+ Добавить</button><button class="btn btn-secondary" onclick="viewPack(\\\'\'+p.id+\'\\\',\\\'\'+escH(p.name)+\'\\\')">👁 Открыть</button></div></div></div>\';}).join("");' +
+  '}catch(e){document.getElementById("packs-grid").innerHTML=\'<div class="empty">Ошибка загрузки</div>\';}}' +
+  'async function addPack(id){try{await apiFetch("/api/sticker-packs/"+id+"/add",{method:"POST"});alert("Пак добавлен!");}catch(e){}}' +
+  'async function viewPack(id,name){' +
+  'const d=await apiFetch("/api/sticker-packs/"+id);if(!d.pack)return;' +
+  'const stks=d.pack.stickers.map(s=>\'<div style="text-align:center"><img src="\'+fullUrl(s.fileUrl)+\'" style="width:80px;height:80px;object-fit:contain;border-radius:8px;background:#2d2d4e;padding:4px"><div style="font-size:11px;color:#94a3b8;margin-top:4px">\'+escH(s.name)+\'</div></div>\').join("") || "<div style=\'color:#94a3b8\'>Нет стикеров</div>";' +
+  'openModal(\'<h3>📦 \'+escH(name)+\'</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-top:8px;max-height:60vh;overflow-y:auto">\'+stks+\'</div><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Закрыть</button></div>\');}' +
+  'async function createPackModal(){' +
+  'openModal(\'<h3>➕ Новый стикерпак</h3><div class="err" id="pk-err"></div><input class="input" id="pk-name" placeholder="Название"><input class="input" id="pk-slug" placeholder="slug (латиница, цифры, -)"><input class="input" id="pk-desc" placeholder="Описание (необязательно)"><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Отмена</button><button class="btn btn-primary" onclick="doCreatePack()">Создать</button></div>\');}' +
+  'async function doCreatePack(){try{const d=await apiFetch("/api/sticker-packs",{method:"POST",body:JSON.stringify({name:document.getElementById("pk-name").value,slug:document.getElementById("pk-slug").value,description:document.getElementById("pk-desc").value})});if(d.error){document.getElementById("pk-err").textContent=d.error;return;}closeModal();loadStickers();}catch(e){document.getElementById("pk-err").textContent=e.message;}}' +
+  'async function loadEmojis(){' +
+  'const c=document.getElementById("tab-content");c.innerHTML=\'<div class="create-bar"><div class="section-title">😎 Кастомные эмодзи</div><button class="btn btn-primary" onclick="createEmojiModal()">+ Добавить эмодзи</button></div><div id="emojis-grid" class="grid"><div class="empty"><div class="empty-icon">😎</div>Загрузка...</div></div>\';' +
+  'try{const d=await apiFetch("/api/custom-emojis");const g=document.getElementById("emojis-grid");' +
+  'if(!d.emojis||!d.emojis.length){g.innerHTML=\'<div class="empty" style="grid-column:1/-1"><div class="empty-icon">😎</div>Нет эмодзи</div>\';return;}' +
+  'g.innerHTML=d.emojis.map(e=>\'<div class="card"><div class="card-cover"><img src="\'+fullUrl(e.imageUrl)+\'" style="width:80px;height:80px;object-fit:contain"></div><div class="card-body"><div class="card-name">:\'+escH(e.name)+\':</div><div class="card-author">@\'+escH(e.authorUsername||"")+\'</div></div></div>\').join("");}' +
+  'catch(e){document.getElementById("emojis-grid").innerHTML=\'<div class="empty">Ошибка загрузки</div>\';}}' +
+  'function createEmojiModal(){openModal(\'<h3>➕ Новый эмодзи</h3><div class="err" id="em-err"></div><input class="input" id="em-name" placeholder="Имя (латиница, цифры, _)"><input type="file" id="em-file" accept="image/*" style="margin-bottom:10px;color:#e2e8f0"><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Отмена</button><button class="btn btn-primary" onclick="doCreateEmoji()">Загрузить</button></div>\');}' +
+  'async function doCreateEmoji(){try{const fd=new FormData();fd.append("name",document.getElementById("em-name").value);fd.append("image",document.getElementById("em-file").files[0]);' +
+  'const t=localStorage.getItem("token");const r=await fetch(BASE+"/api/custom-emojis",{method:"POST",body:fd,headers:t?{"Authorization":"Bearer "+t}:{}});' +
+  'const d=await r.json();if(!r.ok){document.getElementById("em-err").textContent=d.error;return;}closeModal();loadEmojis();}catch(e){document.getElementById("em-err").textContent=e.message;}}' +
+  'async function loadThemes(){' +
+  'const c=document.getElementById("tab-content");' +
+  'c.innerHTML=\'<div class="create-bar"><span class="section-title">🎨 Темы оформления</span><button class="btn btn-primary" onclick="createThemeModal()">+ Создать тему</button></div>\'+(!IS_PREMIUM?\'<div class="premium-note">⭐ Для установки тем требуется Premium</div>\':\'\')+ \'<div id="themes-grid" class="grid"><div class="empty"><div class="empty-icon">🎨</div>Загрузка...</div></div>\';' +
+  'try{const d=await apiFetch("/api/catalog/themes");const g=document.getElementById("themes-grid");' +
+  'if(!d.themes||!d.themes.length){g.innerHTML=\'<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🎨</div>Нет тем</div>\';return;}' +
+  'g.innerHTML=d.themes.map(t=>{const c1=Object.values(t.colors||{})[0]||"#7c3aed";const c2=Object.values(t.colors||{})[1]||"#1e1e28";' +
+  'return\'<div class="card"><div class="card-cover" style="background:linear-gradient(135deg,\'+c1+\',\'+c2+\')"></div><div class="card-body"><div class="card-name">\'+escH(t.name)+\'</div><div class="card-author">@\'+escH(t.authorUsername||"")+\'</div><div class="card-actions">\'+' +
+  '(IS_PREMIUM?\'<button class="btn btn-primary" onclick="applyTheme(\\\'\'+t.id+\'\\\')">Применить</button>\':\'<span style="color:#fbbf24;font-size:12px">⭐ Premium</span>\')+\'</div></div></div>\';}).join("");}' +
+  'catch(e){document.getElementById("themes-grid").innerHTML=\'<div class="empty">Ошибка загрузки</div>\';}}' +
+  'async function applyTheme(id){try{const d=await apiFetch("/api/catalog/themes/"+id+"/apply",{method:"POST"});if(d.ok)alert("Тема применена!");}catch(e){}}' +
+  'function createThemeModal(){if(!IS_PREMIUM){alert("Создание тем доступно только с Premium");return;}' +
+  'openModal(\'<h3>🎨 Новая тема</h3><div class="err" id="th-err"></div><input class="input" id="th-name" placeholder="Название темы"><input class="input" id="th-slug" placeholder="slug"><input class="input" id="th-bg" placeholder="Основной цвет фона (hex, напр. #0f0f17)"><input class="input" id="th-accent" placeholder="Цвет акцента (hex, напр. #7c3aed)"><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Отмена</button><button class="btn btn-primary" onclick="doCreateTheme()">Создать</button></div>\');}' +
+  'async function doCreateTheme(){try{const d=await apiFetch("/api/catalog/themes",{method:"POST",body:JSON.stringify({name:document.getElementById("th-name").value,slug:document.getElementById("th-slug").value,colors:{background:document.getElementById("th-bg").value,accent:document.getElementById("th-accent").value}})});if(d.error){document.getElementById("th-err").textContent=d.error;return;}closeModal();loadThemes();}catch(e){document.getElementById("th-err").textContent=e.message;}}' +
+  'async function loadLanguages(){' +
+  'const c=document.getElementById("tab-content");c.innerHTML=\'<div class="create-bar"><span class="section-title">🌐 Языковые пакеты</span><button class="btn btn-primary" onclick="createLangModal()">+ Добавить</button></div><div id="langs-grid" class="grid"><div class="empty"><div class="empty-icon">🌐</div>Загрузка...</div></div>\';' +
+  'try{const d=await apiFetch("/api/catalog/languages");const g=document.getElementById("langs-grid");' +
+  'if(!d.packs||!d.packs.length){g.innerHTML=\'<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🌐</div>Нет языков</div>\';return;}' +
+  'g.innerHTML=d.packs.map(p=>\'<div class="card"><div class="card-cover"><span style="font-size:40px">🌐</span></div><div class="card-body"><div class="card-name">\'+escH(p.name)+\'</div><div class="card-author">\'+escH(p.languageCode)+\' · @\'+escH(p.authorUsername||"")+\'</div></div></div>\').join("");}' +
+  'catch(e){}}' +
+  'function createLangModal(){openModal(\'<h3>🌐 Новый языковой пакет</h3><div class="err" id="lg-err"></div><input class="input" id="lg-name" placeholder="Название (напр. English)"><input class="input" id="lg-code" placeholder="Код языка (напр. en, ru, tr)"><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Отмена</button><button class="btn btn-primary" onclick="doCreateLang()">Создать</button></div>\');}' +
+  'async function doCreateLang(){try{const d=await apiFetch("/api/catalog/languages",{method:"POST",body:JSON.stringify({name:document.getElementById("lg-name").value,languageCode:document.getElementById("lg-code").value})});if(d.error){document.getElementById("lg-err").textContent=d.error;return;}closeModal();loadLanguages();}catch(e){document.getElementById("lg-err").textContent=e.message;}}' +
+  'function openModal(html){document.getElementById("modal-inner").innerHTML=html;document.getElementById("modal").classList.add("open");}' +
+  'function closeModal(){document.getElementById("modal").classList.remove("open");}' +
+  'document.getElementById("modal").addEventListener("click",function(e){if(e.target===this)closeModal();});' +
+  'tryAuth();' +
+  '</script></body></html>';
 }
-catalogServer.listen(CATALOG_PORT, "0.0.0.0", () => {
-  console.log(`[catalog] Каталог запущен на порту ${CATALOG_PORT}`);
+
+// Маршрут авторизации каталога по токену
+app.post("/api/catalog/auth-by-token", (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "token обязателен" });
+  const row = stickerStmts.getCatalogToken.get(token);
+  if (!row) return res.status(401).json({ error: "Токен недействителен или истёк" });
+  stickerStmts.deleteCatalogToken.run(token);
+  const user = stmts.findUserById.get(row.user_id);
+  if (!user) return res.status(404).json({ error: "Пользователь не найден" });
+  const jwt = require("jsonwebtoken");
+  const appToken = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+  res.json({ token: appToken, user: { id: user.id, username: user.username } });
+});
+
+// GET /catalog — HTML каталога (без auth, страница сама аутентифицируется по токену)
+app.get("/catalog", (req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(buildCatalogHtml("", false));
 });

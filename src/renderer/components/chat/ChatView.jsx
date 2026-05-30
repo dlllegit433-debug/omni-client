@@ -246,7 +246,7 @@ export default function ChatView({ getWs, onStickerPackAdded }) {
       json: {
         type: 'sticker',
         content: sticker.name,
-        fileUrl: sticker.imageUrl,
+        fileUrl: sticker.fileUrl,
         replyToId: replyTo?.id || null,
       }
     })
@@ -626,7 +626,7 @@ function StickerPanel({ packs, onSend, onClose }) {
             onMouseOver={e => e.currentTarget.style.borderColor = 'var(--accent)'}
             onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border)'}
           >
-            <img src={fullUrl(s.imageUrl)} alt={s.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'contain', display: 'block' }} loading="lazy" />
+            <img src={fullUrl(s.fileUrl)} alt={s.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'contain', display: 'block' }} loading="lazy" />
           </button>
         ))}
       </div>

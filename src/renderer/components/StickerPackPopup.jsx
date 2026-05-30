@@ -19,7 +19,7 @@ export default function StickerPackPopup({ slug, onClose, onAddPack }) {
 
   useEffect(() => {
     if (!slug) return
-    fetch(`${BASE_URL}/api/sticker-packs/by-slug/${slug}`)
+    fetch(`${BASE_URL}/api/sticker-packs/${slug}`)
       .then(r => r.json())
       .then(d => { if (d.pack) setPack(d.pack) })
       .catch(() => {})
@@ -71,7 +71,7 @@ export default function StickerPackPopup({ slug, onClose, onAddPack }) {
               <div className={styles.info}>
                 <div className={styles.name}>{pack.name}</div>
                 {pack.description && <div className={styles.desc}>{pack.description}</div>}
-                <div className={styles.meta}>{pack.stickerCount} стикеров • @{pack.authorUsername}</div>
+                <div className={styles.meta}>{pack.stickers?.length || 0} стикеров • @{pack.authorUsername}</div>
                 <div className={styles.link}>Om.org/{pack.slug}</div>
               </div>
             </div>
@@ -80,7 +80,7 @@ export default function StickerPackPopup({ slug, onClose, onAddPack }) {
               <div className={styles.grid}>
                 {pack.stickers.slice(0, 20).map(s => (
                   <div key={s.id} className={styles.stickerItem}>
-                    <img src={fullUrl(s.imageUrl)} alt={s.name} loading="lazy" />
+                    <img src={fullUrl(s.fileUrl)} alt={s.name} loading="lazy" />
                   </div>
                 ))}
               </div>

@@ -53,7 +53,7 @@ function CatalogLinkButton() {
     try {
       const res = await post('/api/catalog/session-link')
       if (res.ok) {
-        const catalogUrl = `${BASE_URL.replace(':3000', ':228')}/?catalog_token=${res.data.token}`
+        const catalogUrl = `${BASE_URL}/catalog?catalog_token=${res.data.token}`
         window.open(catalogUrl, '_blank')
       } else {
         addToast({ title: 'Ошибка', body: res.data?.error || 'Не удалось открыть каталог', type: 'error' })
