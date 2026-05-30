@@ -79,19 +79,25 @@ function StickerPacksTab({ me }) {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [selectedPack, setSelectedPack] = useState(null)
+  const [deleteModal, setDeleteModal] = useState(null)
   const { addToast } = useStore()
 
   useEffect(() => { loadPacks() }, [])
 
   async function loadPacks() {
     setLoading(true)
-    const res = await get('/api/sticker-packs')
-    if (res.ok) setPacks((res.data.packs || []).filter(p => p.authorId === me?.id))
+    const res = await get('/api/my-authored-packs')
+    if (res.ok) setPacks(res.data.packs || [])
     setLoading(false)
   }
 
-  async function deletePack(packId) {
-    if (!confirm('Удалить пак? Все стикеры будут удалены.')) return
+  function deletePack(packId) {
+    setDeleteModal(packId)
+  }
+
+  async function confirmDeletePack() {
+    const packId = deleteModal
+    setDeleteModal(null)
     const res = await del(`/api/sticker-packs/${packId}`)
     if (res.ok) { loadPacks(); setSelectedPack(null) }
     else addToast({ title: 'Ошибка', body: res.data?.error || 'Не удалось удалить', type: 'error' })
@@ -132,7 +138,7 @@ function StickerPacksTab({ me }) {
             </div>
             <div className={styles.packInfo}>
               <div className={styles.packName}>{pack.name}</div>
-              <div className={styles.packMeta}>{pack.stickerCount} стикеров</div>
+              <div className={styles.packMeta}>{pack.stickers?.length ?? pack.stickerCount ?? 0} стикеров</div>
               <div className={styles.packLink}>Om.org/{pack.slug}</div>
             </div>
             <button className={styles.packDelete} onClick={e => { e.stopPropagation(); deletePack(pack.id) }} title="Удалить">
@@ -143,6 +149,21 @@ function StickerPacksTab({ me }) {
           </div>
         ))}
       </div>
+
+      {deleteModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={() => setDeleteModal(null)}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, minWidth: 320, maxWidth: '90vw' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>🗑 Удалить пак?</div>
+            <div style={{ color: 'var(--text2)', fontSize: 14, marginBottom: 20 }}>Все стикеры будут удалены. Это действие нельзя отменить.</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className={styles.cancelBtn} onClick={() => setDeleteModal(null)}>Отмена</button>
+              <button className={styles.submitBtn} style={{ background: '#ef4444' }} onClick={confirmDeletePack}>Удалить</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -206,7 +227,7 @@ function PackEditor({ pack, onBack }) {
   async function loadStickers() {
     setLoading(true)
     const res = await get(`/api/sticker-packs/${pack.id}/stickers`)
-    if (res.ok) setStickers(res.data.pack?.stickers || [])
+    if (res.ok) setStickers(res.data.stickers || [])
     setLoading(false)
   }
 
@@ -214,7 +235,7 @@ function PackEditor({ pack, onBack }) {
     if (!file) return
     setUploading(true)
     const form = new FormData()
-    form.append('image', file)
+    form.append('file', file)
     form.append('name', stickerName.trim() || file.name.replace(/\.[^.]+$/, ''))
     const res = await post(`/api/sticker-packs/${pack.id}/stickers`, { form })
     setUploading(false)
@@ -285,7 +306,7 @@ function PackEditor({ pack, onBack }) {
       <div className={styles.stickerGrid}>
         {stickers.map(s => (
           <div key={s.id} className={styles.stickerItem}>
-            <img src={fullUrl(s.imageUrl)} alt={s.name} />
+            <img src={fullUrl(s.fileUrl || s.imageUrl)} alt={s.name} />
             <div className={styles.stickerItemName}>{s.name}</div>
             <button className={styles.stickerDelete} onClick={() => deleteSticker(s.id)} title="Удалить">✕</button>
           </div>

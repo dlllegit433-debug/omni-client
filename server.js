@@ -2137,16 +2137,24 @@ app.get("/api/gifts/sent", authMiddleware, (req, res) => {
 });
 
 app.post("/api/gifts/send", authMiddleware, (req, res) => {
-  const { toUserId, giftId, message } = req.body;
-  if (!toUserId || !giftId)
-    return res.status(400).json({ error: "toUserId и giftId обязательны" });
-  if (toUserId === req.user.id)
+  const { toUserId, targetUsername, giftId, message } = req.body;
+
+  let recipientId = toUserId;
+  if (!recipientId && targetUsername) {
+    const found = stmts.findUserByUsername.get(targetUsername.toLowerCase().replace(/^@/, ""));
+    if (!found) return res.status(404).json({ error: "Пользователь не найден" });
+    recipientId = found.id;
+  }
+
+  if (!recipientId || !giftId)
+    return res.status(400).json({ error: "Получатель и giftId обязательны" });
+  if (recipientId === req.user.id)
     return res.status(400).json({ error: "Нельзя отправить подарок себе" });
 
   const gift = GIFTS_CATALOG.find((g) => g.id === giftId);
   if (!gift) return res.status(404).json({ error: "Подарок не найден" });
 
-  const toUser = stmts.findUserById.get(toUserId);
+  const toUser = stmts.findUserById.get(recipientId);
   if (!toUser) return res.status(404).json({ error: "Получатель не найден" });
 
   const isAdminSender = req.user.is_admin === 1;
@@ -2177,7 +2185,7 @@ app.post("/api/gifts/send", authMiddleware, (req, res) => {
   stmts.insertGift.run(
     giftId2,
     req.user.id,
-    toUserId,
+    recipientId,
     gift.id,
     gift.name,
     gift.emoji,
@@ -2186,7 +2194,7 @@ app.post("/api/gifts/send", authMiddleware, (req, res) => {
   );
 
   // Уведомить получателя
-  broadcastToUser(toUserId, {
+  broadcastToUser(recipientId, {
     type: "gift_received",
     gift: {
       id: giftId2,
@@ -2204,7 +2212,7 @@ app.post("/api/gifts/send", authMiddleware, (req, res) => {
   });
 
   // Создать или найти прямой чат и добавить подарок как сообщение
-  const existingConv = stmts.findDirectConversation.get(req.user.id, toUserId);
+  const existingConv = stmts.findDirectConversation.get(req.user.id, recipientId);
   let giftConvId;
   if (existingConv) {
     giftConvId = existingConv.id;
@@ -2212,7 +2220,7 @@ app.post("/api/gifts/send", authMiddleware, (req, res) => {
     giftConvId = uuidv4();
     stmts.insertConversation.run(giftConvId, null, 0, null);
     stmts.addMember.run(giftConvId, req.user.id);
-    stmts.addMember.run(giftConvId, toUserId);
+    stmts.addMember.run(giftConvId, recipientId);
   }
   const giftMsgId = uuidv4();
   const giftContent = JSON.stringify({
@@ -4067,10 +4075,6 @@ app.get("/api/channels/:id/messages", authMiddleware, (req, res) => {
 });
 
 app.post("/api/channels/:id/messages", authMiddleware, (req, res) => {
-  return res
-    .status(403)
-    .json({ error: "Написание сообщений в серверах отключено" });
-
   const channel = stmts.getChannel.get(req.params.id);
   if (!channel) return res.status(404).json({ error: "Канал не найден" });
 

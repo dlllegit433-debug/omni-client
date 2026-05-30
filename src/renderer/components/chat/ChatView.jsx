@@ -721,11 +721,14 @@ function MessageBubble({ msg, isMe, onCtxMenu, onReact, showAvatar, emojiPickerM
 
         {hasReactions && (
           <div className={styles.reactions}>
-            {Object.entries(msg.reactions).map(([emoji, users]) => (
-              <button key={emoji} className={styles.reactionBtn} onClick={() => onReact(emoji)}>
-                {emoji} <span>{Array.isArray(users) ? users.length : users}</span>
-              </button>
-            ))}
+            {Object.entries(msg.reactions).map(([emoji, users]) => {
+              const count = Array.isArray(users) ? users.length : (typeof users === 'number' ? users : 1)
+              return (
+                <button key={emoji} className={styles.reactionBtn} onClick={() => onReact(emoji)}>
+                  {emoji} <span>{count}</span>
+                </button>
+              )
+            })}
           </div>
         )}
 
