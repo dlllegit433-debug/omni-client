@@ -1,6 +1,6 @@
 {
   "name": "omni-client",
-  "version": "1.2.0",
+  "version": "2.5.0",
   "description": "Omni Desktop Messenger",
   "main": "src/main/main.js",
   "scripts": {
@@ -19,7 +19,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^8.2.2",
-    "electron": "^42.3.0",
+    "electron": "33.4.0",
     "electron-builder": "^24.13.3",
     "vite": "^5.3.1",
     "wait-on": "^7.2.0"
@@ -27,7 +27,7 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "11.7.0",
     "cors": "^2.8.6",
     "date-fns": "^3.6.0",
     "express": "^5.2.1",
