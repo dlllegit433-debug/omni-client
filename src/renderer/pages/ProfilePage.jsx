@@ -46,13 +46,57 @@ export default function ProfilePage() {
   const [nicknameRainbow, setNicknameRainbow] = useState(me?.nicknameRainbow || false)
   const [nicknameFont, setNicknameFont] = useState(me?.nicknameFont || 'Inter, sans-serif')
   const [savingPremium, setSavingPremium] = useState(false)
+  const [uploadingBanner, setUploadingBanner] = useState(false)
+  const [bannerColor, setBannerColor] = useState(me?.bannerColor || '#7c3aed')
 
   const avatarRef = useRef(null)
   const wallpaperRef = useRef(null)
+  const bannerRef = useRef(null)
 
   const avatarUrl = me?.avatar ? (me.avatar.startsWith('http') ? me.avatar : BASE_URL + me.avatar) : null
   const wallpaperUrl = me?.wallpaper ? (me.wallpaper.startsWith('http') ? me.wallpaper : BASE_URL + me.wallpaper) : null
+  const bannerUrl = me?.banner ? (me.banner.startsWith('http') ? me.banner : BASE_URL + me.banner) : null
   const roleInfo = ROLE_INFO[me?.globalRole]
+
+  function isBannerVideo(url) {
+    if (!url) return false
+    const ext = url.split('?')[0].split('.').pop().toLowerCase()
+    return ['mp4', 'webm', 'ogg', 'mov'].includes(ext)
+  }
+
+  async function uploadBanner(file) {
+    if (!file) return
+    setUploadingBanner(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const uploadRes = await fetch(BASE_URL + '/api/media/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken() || ''}` },
+        body: form,
+      })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Ошибка загрузки')
+      const res = await patch('/api/users/me', { json: { banner: uploadData.url } })
+      if (res.ok) {
+        updateMe({ banner: uploadData.url })
+        addToast({ title: 'Баннер обновлён', type: 'success' })
+      }
+    } catch (e) {
+      addToast({ title: e.message || 'Ошибка загрузки баннера', type: 'error' })
+    }
+    setUploadingBanner(false)
+  }
+
+  async function removeBanner() {
+    const res = await patch('/api/users/me', { json: { banner: null } })
+    if (res.ok) { updateMe({ banner: null }); addToast({ title: 'Баннер удалён', type: 'success' }) }
+  }
+
+  async function saveBannerColor() {
+    const res = await patch('/api/users/me', { json: { bannerColor } })
+    if (res.ok) { updateMe({ bannerColor }); addToast({ title: 'Цвет баннера сохранён', type: 'success' }) }
+  }
 
   async function saveProfile() {
     setSaving(true)
@@ -211,6 +255,53 @@ export default function ProfilePage() {
           <button className={styles.saveBtn} onClick={saveProfile} disabled={saving}>
             {saving ? 'Сохраняю...' : 'Сохранить'}
           </button>
+        </div>
+
+        {/* ─── Banner card ─── */}
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>🎨 Баннер профиля</h3>
+          <p className={styles.bannerHint}>Фото, GIF или видео — отображается в вашем профиле</p>
+
+          {/* Preview */}
+          <div className={styles.bannerPreviewWrap}>
+            {bannerUrl ? (
+              isBannerVideo(bannerUrl) ? (
+                <video className={styles.bannerPreview} src={bannerUrl} autoPlay loop muted playsInline />
+              ) : (
+                <img className={styles.bannerPreview} src={bannerUrl} alt="Баннер" />
+              )
+            ) : (
+              <div
+                className={styles.bannerPreviewEmpty}
+                style={{ background: bannerColor || 'linear-gradient(135deg, var(--accent), var(--acc3, #4c1d95))' }}
+              >
+                <span className={styles.bannerPreviewEmptyIcon}>🖼</span>
+                <span className={styles.bannerPreviewEmptyText}>Нет медиа — используется цвет</span>
+              </div>
+            )}
+          </div>
+
+          {/* Upload controls */}
+          <div className={styles.bannerControls}>
+            <button className={styles.wallpaperBtn} onClick={() => bannerRef.current?.click()} disabled={uploadingBanner}>
+              {uploadingBanner ? 'Загружаю...' : '📁 Загрузить фото / GIF / видео'}
+            </button>
+            {bannerUrl && (
+              <button className={styles.wallpaperBtnRemove} onClick={removeBanner}>✕ Удалить медиа</button>
+            )}
+          </div>
+
+          {/* Color picker */}
+          <div className={styles.bannerColorSection}>
+            <label className={styles.label}>Цвет баннера (если нет медиа)</label>
+            <div className={styles.bannerColorRow}>
+              <input type="color" className={styles.colorPicker} value={bannerColor} onChange={e => setBannerColor(e.target.value)} />
+              <div className={styles.bannerColorSwatch} style={{ background: bannerColor }} />
+              <button className={styles.saveBtn} style={{ padding: '8px 16px', fontSize: '13px' }} onClick={saveBannerColor}>Сохранить цвет</button>
+            </div>
+          </div>
+
+          <input ref={bannerRef} type="file" accept="image/*,video/*,.gif" style={{ display: 'none' }} onChange={e => uploadBanner(e.target.files[0])} />
         </div>
 
         <div className={styles.card}>

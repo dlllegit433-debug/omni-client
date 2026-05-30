@@ -3,3 +3,4 @@
 - [catalog routing](catalog-routing.md) — catalog HTML is served at GET /catalog on main app (port 3000), not a separate port; avoids .replit port mapping restrictions.
 - [conversations otherUser](conversations-other-user.md) — getConversationDetail() doesn't know who "me" is; otherUser must be derived at the endpoint level from req.user.id.
 - [reactions format](reactions-format.md) — reactions are stored as {emoji: [{userId,username}]} (arrays); frontend must use Array.isArray(users) ? users.length : users to render count safely.
+- [user profile banner](user-banner.md) — banner/bannerColor added to users table via ALTER TABLE; formatUser returns both; PATCH /api/users/me saves them; video detection by file extension.

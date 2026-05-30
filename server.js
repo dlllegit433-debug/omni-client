@@ -288,6 +288,12 @@ try {
 try {
   db.exec("ALTER TABLE users ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0");
 } catch {}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN banner TEXT");
+} catch {}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN banner_color TEXT");
+} catch {}
 
 // ─── Sticker / Emoji / Catalog tables ────────────────────────────────────────
 db.exec(`
@@ -1078,6 +1084,8 @@ function formatUser(row, premiumInfo = null) {
     coins: isAdmin ? ADMIN_INFINITE_COINS : (coinsRow?.coins ?? 0),
     infiniteCoins: isAdmin,
     theme: row.theme ?? "violet",
+    banner: row.banner ?? null,
+    bannerColor: row.banner_color ?? null,
     hasSneakPeek: sneakPeekAccess,
     isPremium,
     premiumUntil: isPremium
@@ -1808,6 +1816,8 @@ app.patch("/api/users/me", authMiddleware, (req, res) => {
     nicknameColor,
     nicknameRainbow,
     nicknameFont,
+    banner,
+    bannerColor,
   } = req.body;
   const user = req.user;
   stmts.updateUser.run(
@@ -1822,6 +1832,12 @@ app.patch("/api/users/me", authMiddleware, (req, res) => {
       JSON.stringify(avatars),
       user.id,
     );
+  }
+  if ('banner' in req.body) {
+    db.prepare("UPDATE users SET banner = ? WHERE id = ?").run(banner ?? null, user.id);
+  }
+  if ('bannerColor' in req.body) {
+    db.prepare("UPDATE users SET banner_color = ? WHERE id = ?").run(bannerColor ?? null, user.id);
   }
   const premium = stmts.getPremium.get(user.id);
   const hasPremium = premium && new Date(premium.expires_at) > new Date();
